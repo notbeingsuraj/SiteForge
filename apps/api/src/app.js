@@ -4,7 +4,6 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { config } from './config/env.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
-import leadRoutes from './routes/leadRoutes.js';
 
 const app = express();
 
@@ -42,8 +41,18 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Routes
-app.use('/api/leads', leadRoutes);
+// API info endpoint
+app.get('/api', (req, res) => {
+  res.json({
+    name: 'SiteForge API',
+    version: '1.0.0',
+    description: 'Stateless backend for business intelligence and website generation',
+    endpoints: {
+      health: '/health',
+      // Note: Lead persistence endpoints removed - application is stateless
+    },
+  });
+});
 
 // Error handlers
 app.use(notFound);

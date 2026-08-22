@@ -55,10 +55,7 @@
 
 * Node.js
 * Express
-* MongoDB
-* Mongoose
 * JWT
-* bcrypt
 * Helmet
 * express-rate-limit
 * Zod/Joi
@@ -261,66 +258,43 @@ The AI controls **content and configuration**, while your application controls *
 
 ---
 
-# 8. MongoDB Collections
+# 8. Data Models (In-Memory / Stateless)
 
-## users
+Since SiteForge is now a stateless application with no database persistence, the following data structures represent the in-memory objects used during request processing. They are not persisted between requests.
 
-```text
-_id
-name
-email
-passwordHash
-role
-createdAt
-updatedAt
-```
-
-## leads
+## Lead (Transient)
 
 ```text
-_id
-businessId
-status
-opportunityScore
-priority
-assignedPackage
-quotedPrice
-notes
-lastContactedAt
-nextFollowUpAt
-createdAt
-updatedAt
-```
-
-## businesses
-
-```text
-_id
-name
-category
-address
-phone
-website
-rating
-reviewCount
-openingHours
-mapsUrl
-description
-services
-socialLinks
-photos
-coordinates
-source
-createdAt
-updatedAt
-```
-
-## businessAnalyses
-
-```text
-_id
-businessId
+businessName
+businessCategory
+businessType
+location
+contact
+digitalPresence
+businessData
 businessDNA
+digitalAudit
+websiteStrategy
+generatedWebsite
+opportunityScore
+status
+internalNotes
+customInstructions
+createdAt (request timestamp)
+```
+
+## BusinessAnalysis (Transient)
+
+```text
+businessId (placeId from Google Maps)
+businessDNA
+digitalAudit
+websiteStrategy
+landingPageSpec
+websiteCopy
+opportunityScore
+generatedAt (request timestamp)
+```
 digitalAudit
 opportunityScore
 scoreReasons

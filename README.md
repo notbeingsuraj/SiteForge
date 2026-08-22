@@ -5,7 +5,7 @@ Internal Sales & Website Generation Platform for identifying local businesses wi
 ## Tech Stack
 
 - **Frontend**: React + Vite + TypeScript + Tailwind CSS
-- **Backend**: Node.js + Express + MongoDB
+- **Backend**: Node.js + Express (Stateless - No Database)
 - **AI**: OmniRoute (unified model gateway)
 
 ## Project Structure
@@ -25,7 +25,6 @@ siteforge/
 ### Prerequisites
 
 - Node.js 18+
-- MongoDB
 - npm or yarn
 
 ### Installation
@@ -37,7 +36,6 @@ npm install
 # Configure environment variables in apps/api/.env
 # Required:
 # - PORT=5000
-# - MONGODB_URI=mongodb://localhost:27017/siteforge
 # - JWT_SECRET=your-secure-secret
 # - OMNIROUTE_API_KEY=your-api-key
 # Optional:
@@ -69,7 +67,6 @@ npm run dev:web
 - Automated website strategy generation
 - Landing page preview
 - Outreach message generation (WhatsApp, Email, Instagram, Call scripts)
-- Lead CRM with status tracking
 
 ## Documentation
 
