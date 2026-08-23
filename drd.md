@@ -9,31 +9,31 @@
 # 1. System Architecture
 
 ```text
-                    ┌───────────────────┐
-                    │      User         │
-                    └─────────┬─────────┘
-                              │
-                              ▼
-                    ┌───────────────────┐
-                    │   React Frontend  │
-                    └─────────┬─────────┘
-                              │
-                         REST API
-                              │
-                              ▼
-                    ┌───────────────────┐
-                    │ Node / Express    │
-                    │ Backend           │
-                    └─────────┬─────────┘
-                              │
-            ┌─────────────────┼─────────────────┐
-            │                 │                 │
-            ▼                 ▼                 ▼
-       Business Data       AI Engine        MongoDB
-       Collection          OmniRoute         Database
-            │                 │
-            ▼                 ▼
-       External APIs      LLM Providers
+                     ┌───────────────────┐
+                     │      User         │
+                     └─────────┬─────────┘
+                               │
+                               ▼
+                     ┌───────────────────┐
+                     │   React Frontend  │
+                     └─────────┬─────────┘
+                               │
+                          REST API
+                               │
+                               ▼
+                     ┌───────────────────┐
+                     │ Node / Express    │
+                     │ Backend           │
+                     └─────────┬─────────┘
+                               │
+             ┌─────────────────┼─────────────────┐
+             │                 │                 │
+             ▼                 ▼
+        Business Data       AI Engine
+        Processing          OmniRoute
+             │                 │
+             ▼                 ▼
+        External APIs      LLM Providers
 ```
 
 ---

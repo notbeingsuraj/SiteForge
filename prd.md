@@ -577,7 +577,6 @@ Requirements:
 * Helmet
 * CORS configuration
 * Input validation
-* MongoDB sanitization
 * Environment variables
 * API key isolation
 * Server-side AI calls
