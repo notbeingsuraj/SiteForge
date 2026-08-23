@@ -10,8 +10,8 @@ Complete stateless Business Intelligence Research application.
 ```bash
 cd apps/api
 # Edit .env:
-# - JWT_SECRET=your-secure-secret
-# - OMNIROUTE_API_KEY=your-api-key
+# - GOOGLE_MAPS_API_KEY=your-google-maps-api-key
+# - OMNIROUTE_API_KEY=your-omniroute-api-key
 ```
 
 ### 2. Run App

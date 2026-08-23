@@ -19,7 +19,7 @@ class GoogleMapsService {
    */
   async getPlaceDetails(placeId) {
     if (!this.apiKey) {
-      throw new Error('Missing GOOGLE_MAPS_API_KEY (or GOOGLE_PLACES_API_KEY)');
+      throw new Error('Missing GOOGLE_MAPS_API_KEY');
     }
 
     try {
@@ -50,7 +50,7 @@ class GoogleMapsService {
    */
   async searchPlace(query) {
     if (!this.apiKey) {
-      throw new Error('Missing GOOGLE_MAPS_API_KEY (or GOOGLE_PLACES_API_KEY)');
+      throw new Error('Missing GOOGLE_MAPS_API_KEY');
     }
 
     try {

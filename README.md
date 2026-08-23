@@ -35,11 +35,13 @@ npm install
 
 # Configure environment variables in apps/api/.env
 # Required:
-# - PORT=5000
-# - JWT_SECRET=your-secure-secret
-# - OMNIROUTE_API_KEY=your-api-key
+# - GOOGLE_MAPS_API_KEY=your-google-maps-api-key
+# - OMNIROUTE_API_KEY=your-omniroute-api-key
 # Optional:
+# - PORT=5001
 # - FRONTEND_URL=http://localhost:5173
+# - OMNIROUTE_BASE_URL=https://api.omniroute.ai/v1
+# - DEBUG_BUSINESS_ANALYSIS=false
 
 # Start development servers
 npm run dev

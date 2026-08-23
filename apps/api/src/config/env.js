@@ -11,13 +11,13 @@ if (missing.length > 0) {
 }
 
 export const config = {
-  port: process.env.PORT || 5000,
+  port: process.env.PORT || 5001,
   nodeEnv: process.env.NODE_ENV || 'development',
   debugBusinessAnalysis: process.env.DEBUG_BUSINESS_ANALYSIS === 'true',
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
   omniroute: {
     apiKey: process.env.OMNIROUTE_API_KEY,
-    baseUrl: process.env.OMNIROUTE_BASE_URL || 'http://localhost:20128/v1',
+    baseUrl: process.env.OMNIROUTE_BASE_URL || 'https://api.omniroute.ai/v1',
     models: {
       fast: process.env.OMNIROUTE_FAST_MODEL || 'auto/coding',
       reasoning: process.env.OMNIROUTE_REASONING_MODEL || 'auto/coding',
