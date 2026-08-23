@@ -3,53 +3,97 @@
  * 
  * This service is the core of the business data extraction pipeline.
  * It extracts and normalizes business information from various sources.
+ * Now works with BusinessDataExtractor output (no Google Maps API required).
  */
 
 class BusinessResearchService {
   /**
-   * Extract business information and return structured JSON
+   * Extract business information from new extraction format and return structured JSON
    */
-  async extractBusinessIntelligence(rawBusinessData) {
+  async extractBusinessIntelligence(extractedData) {
     try {
-      if (!rawBusinessData) {
+      if (!extractedData) {
         throw new Error('Business data is required');
       }
 
-      const intelligence = {
-        source: {
-          placeId: rawBusinessData.place_id || null,
-          mapsUrl: rawBusinessData.url || null,
-        },
-        identity: this.extractIdentity(rawBusinessData),
-        contact: this.extractContact(rawBusinessData),
-        location: this.extractLocation(rawBusinessData),
-        digitalPresence: this.extractDigitalPresence(rawBusinessData),
-        services: this.extractServices(rawBusinessData),
-        trustSignals: this.extractTrustSignals(rawBusinessData),
-        positioning: this.extractPositioning(rawBusinessData),
-        facts: this.extractVerifiedFacts(rawBusinessData),
-        unknowns: this.identifyUnknowns(rawBusinessData),
-        rating: rawBusinessData.rating || null,
-        reviewCount: rawBusinessData.user_ratings_total || null,
-        openingHours: rawBusinessData.opening_hours || null,
-        reviews: rawBusinessData.reviews || [],
-        photos: rawBusinessData.photos?.map(photo => photo.photo_reference || photo.url) || [],
-      };
-
-      return intelligence;
+      // Handle both old Google Places format and new extraction format
+      const isNewFormat = extractedData.business !== undefined;
+      
+      if (isNewFormat) {
+        return this.extractFromNewFormat(extractedData);
+      } else {
+        return this.extractFromGooglePlacesFormat(extractedData);
+      }
     } catch (error) {
       console.error('Business research extraction error:', error);
       throw error;
     }
   }
 
-  extractIdentity(data) {
-    return {
-      name: data.name || null,
-      category: data.category || data.types?.[0] || null,
-      businessType: data.businessType || null,
-      description: data.description || data.editorial_summary?.overview || null,
+  /**
+   * Extract from new BusinessDataExtractor format
+   */
+  extractFromNewFormat(data) {
+    const business = data.business || {};
+    const contact = data.contact || {};
+    const location = data.location || {};
+    const ratings = data.ratings || {};
+    const hours = data.hours || {};
+    const metadata = data.metadata || {};
+
+    const intelligence = {
+      source: {
+        placeId: metadata.placeId || null,
+        mapsUrl: metadata.originalUrl || metadata.sourceUrl || null,
+      },
+      identity: {
+        name: business.name,
+        category: business.category,
+        businessType: business.business_type,
+        description: business.description,
+        categories: business.categories || [],
+      },
+      contact: {
+        phone: contact.phone,
+        email: contact.email,
+        website: contact.website,
+      },
+      location: {
+        address: location.full_address,
+        city: location.city,
+        state: location.state,
+        country: location.country,
+        postalCode: location.postal_code,
+        coordinates: (location.latitude && location.longitude) ? {
+          lat: location.latitude,
+          lng: location.longitude,
+        } : null,
+      },
+      digitalPresence: {
+        googleMapsUrl: metadata.originalUrl || metadata.sourceUrl || null,
+        website: contact.website || null,
+        socialProfiles: { facebook: null, instagram: null, twitter: null, linkedin: null },
+        hasWebsite: !!contact.website,
+        photos: [],
+      },
+      services: business.services || [],
+      trustSignals: this.buildTrustSignals(ratings, data.reviews),
+      positioning: {
+        priceLevel: data.pricing || null,
+        category: business.category,
+        location: location.full_address,
+      },
+      facts: this.buildVerifiedFacts(business, contact, location, ratings, metadata),
+      unknowns: this.identifyUnknowns(business, contact, location),
+      rating: ratings.rating,
+      reviewCount: ratings.review_count,
+      openingHours: this.formatOpeningHours(hours),
+      reviews: data.reviews || [],
+      photos: [],
+      confidence: data.confidence || {},
     };
+
+    return intelligence;
   }
 
   extractContact(data) {
