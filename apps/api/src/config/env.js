@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const requiredEnvVars = ['GOOGLE_MAPS_API_KEY', 'OMNIROUTE_API_KEY'];
+const requiredEnvVars = ['OMNIROUTE_API_KEY'];
 const missing = requiredEnvVars.filter(key => !process.env[key]);
 if (missing.length > 0) {
   console.error(`\n❌ Missing required environment variables: ${missing.join(', ')}`);
@@ -14,7 +14,6 @@ export const config = {
   port: process.env.PORT || 5001,
   nodeEnv: process.env.NODE_ENV || 'development',
   debugBusinessAnalysis: process.env.DEBUG_BUSINESS_ANALYSIS === 'true',
-  googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
   omniroute: {
     apiKey: process.env.OMNIROUTE_API_KEY,
     baseUrl: process.env.OMNIROUTE_BASE_URL || 'https://api.omniroute.ai/v1',
@@ -30,4 +29,9 @@ export const config = {
     maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
   },
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+  extraction: {
+    timeout: parseInt(process.env.EXTRACTION_TIMEOUT_MS) || 15000,
+    maxRetries: parseInt(process.env.EXTRACTION_MAX_RETRIES) || 2,
+    userAgent: 'SiteForge/1.0 (+https://siteforge.app)',
+  },
 };
