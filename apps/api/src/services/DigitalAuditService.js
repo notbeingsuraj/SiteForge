@@ -88,6 +88,14 @@ class DigitalAuditService {
    * Generate audit for business with no website
    */
   generateNoWebsiteAudit(businessData) {
+    // Support both legacy normalized format and new extraction format
+    // Legacy: businessData.digitalPresence.googleMapsUrl
+    // New:    businessData.source.mapsUrl
+    const googleMapsUrl = businessData.digitalPresence?.googleMapsUrl
+      || businessData.source?.mapsUrl
+      || null;
+    const phone = businessData.contact?.phone || null;
+
     return {
       websiteExists: false,
       websiteUrl: null,
@@ -100,22 +108,22 @@ class DigitalAuditService {
         conversion: { score: 0, notes: 'No website exists', verified: true },
         trust: { score: 0, notes: 'No website exists', verified: true },
         seo: { score: 0, notes: 'No website exists', verified: true },
-        localSeo: { 
-          score: businessData.digitalPresence?.googleMapsUrl ? 3 : 0, 
-          notes: businessData.digitalPresence?.googleMapsUrl 
-            ? 'Google Business Profile exists but no website' 
-            : 'No website or Google Business Profile',
-          verified: true 
+        localSeo: {
+          score: googleMapsUrl ? 3 : 0,
+          notes: googleMapsUrl
+            ? 'Google Business Profile exists but no website'
+            : 'No website or Google Business Profile detected',
+          verified: true,
         },
         content: { score: 0, notes: 'No website exists', verified: true },
         branding: { score: 0, notes: 'No website exists', verified: true },
         performance: { score: 0, notes: 'No website exists', verified: true },
-        contactAccessibility: { 
-          score: businessData.contact?.phone ? 2 : 0,
-          notes: businessData.contact?.phone 
-            ? 'Phone available on Google Maps only' 
+        contactAccessibility: {
+          score: phone ? 2 : 0,
+          notes: phone
+            ? 'Phone available via Google Maps only'
             : 'No contact information available online',
-          verified: true 
+          verified: true,
         },
       },
       strengths: [],
@@ -189,7 +197,7 @@ class DigitalAuditService {
       dataLimitations: [
         'No website to audit',
         'Cannot assess design, UX, or content quality',
-        'Limited to Google Business Profile data only',
+        'Limited to publicly available business data only',
       ],
       metadata: {
         auditedAt: new Date().toISOString(),
