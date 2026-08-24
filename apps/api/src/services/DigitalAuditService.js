@@ -19,8 +19,8 @@ class DigitalAuditService {
     try {
       const startTime = Date.now();
 
-      // Check if website exists
-      const hasWebsite = !!businessData.contact?.website;
+      // Check if website exists - handle both old and new data formats
+      const hasWebsite = !!businessData.contact?.website || !!businessData.digitalPresence?.website;
 
       // If no website, return zero scores
       if (!hasWebsite) {

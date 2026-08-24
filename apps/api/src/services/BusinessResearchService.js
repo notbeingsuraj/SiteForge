@@ -95,6 +95,85 @@ class BusinessResearchService {
 
     return intelligence;
   }
+/**
+   * Extract from legacy Google Places API format (for backward compatibility)
+   */
+  extractFromGooglePlacesFormat(data) {
+    return {
+      source: {
+        placeId: data.place_id || null,
+        mapsUrl: data.url || null,
+      },
+      identity: this.extractIdentity(data),
+      contact: this.extractContact(data),
+      location: this.extractLocation(data),
+      digitalPresence: this.extractDigitalPresence(data),
+      services: this.extractServices(data),
+      trustSignals: this.extractTrustSignals(data),
+      positioning: this.extractPositioning(data),
+      facts: this.extractVerifiedFacts(data),
+      unknowns: this.identifyUnknownsLegacy(data),
+      rating: data.rating || null,
+      reviewCount: data.user_ratings_total || null,
+      openingHours: data.opening_hours || null,
+      reviews: data.reviews || [],
+      photos: data.photos?.map(photo => photo.photo_reference || photo.url) || [],
+      confidence: {},
+    };
+  }
+
+  buildTrustSignals(ratings, reviews) {
+    const signals = [];
+    if (ratings.rating !== null && ratings.rating !== undefined) {
+      signals.push({ type: 'rating', value: ratings.rating, source: 'google_maps_public', verified: true });
+    }
+    if (ratings.review_count !== null && ratings.review_count !== undefined) {
+      signals.push({ type: 'review_count', value: ratings.review_count, source: 'google_maps_public', verified: true });
+    }
+    if (reviews && reviews.length > 0) {
+      signals.push({ type: 'reviews_available', value: reviews.length, source: 'google_maps_public', verified: true });
+    }
+    return signals;
+  }
+
+  buildVerifiedFacts(business, contact, location, ratings, metadata) {
+    const facts = [];
+    if (business.name) facts.push({ claim: `Business name is ${business.name}`, source: 'google_maps_public', verified: true });
+    if (business.category) facts.push({ claim: `Business category is ${business.category}`, source: 'google_maps_public', verified: true });
+    if (ratings.rating) facts.push({ claim: `Has a rating of ${ratings.rating}/5`, source: 'google_maps_public', verified: true });
+    if (ratings.review_count) facts.push({ claim: `Has ${ratings.review_count} reviews`, source: 'google_maps_public', verified: true });
+    if (contact.website) facts.push({ claim: `Website: ${contact.website}`, source: 'google_maps_public', verified: true });
+    if (contact.phone) facts.push({ claim: `Phone: ${contact.phone}`, source: 'google_maps_public', verified: true });
+    if (location.full_address) facts.push({ claim: `Address: ${location.full_address}`, source: 'google_maps_public', verified: true });
+    if (metadata.hasJsonLd) facts.push({ claim: 'Structured data (JSON-LD) found on page', source: 'page_metadata', verified: true });
+    return facts;
+  }
+
+  identifyUnknowns(business, contact, location) {
+    const unknowns = [];
+    if (!business.name) unknowns.push('name');
+    if (!business.category) unknowns.push('category');
+    if (!contact.website) unknowns.push('website');
+    if (!contact.phone) unknowns.push('phone');
+    if (!contact.email) unknowns.push('email');
+    if (!location.full_address) unknowns.push('address');
+    if (!business.description) unknowns.push('description');
+    return unknowns;
+  }
+
+  formatOpeningHours(hours) {
+    if (!hours) return null;
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const formatted = {};
+    let hasAny = false;
+    for (const day of days) {
+      if (hours[day]) {
+        formatted[day] = hours[day];
+        hasAny = true;
+      }
+    }
+    return hasAny ? formatted : null;
+  }
 
   extractContact(data) {
     return {
