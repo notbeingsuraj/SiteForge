@@ -5,6 +5,14 @@ import rateLimit from 'express-rate-limit';
 import { config } from './config/env.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
+// Import route modules
+import healthRoutes from './routes/health.js';
+import businessRoutes from './routes/business.js';
+import leadsRoutes from './routes/leads.js';
+import brandStrategyRoutes from './routes/brandStrategy.js';
+import landingPageRoutes from './routes/landingPage.js';
+import digitalAuditRoutes from './routes/digitalAudit.js';
+
 const app = express();
 
 // Security middleware
@@ -36,10 +44,13 @@ app.use('/api/', limiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
+// Mount API routes
+app.use('/health', healthRoutes);
+app.use('/api/business', businessRoutes);
+app.use('/api/leads', leadsRoutes);
+app.use('/api/brand-strategy', brandStrategyRoutes);
+app.use('/api/landing-page', landingPageRoutes);
+app.use('/api/digital-audit', digitalAuditRoutes);
 
 // API info endpoint
 app.get('/api', (req, res) => {
@@ -49,7 +60,11 @@ app.get('/api', (req, res) => {
     description: 'Stateless backend for business intelligence and website generation',
     endpoints: {
       health: '/health',
-      // Note: Lead persistence endpoints removed - application is stateless
+      business: '/api/business',
+      leads: '/api/leads',
+      brandStrategy: '/api/brand-strategy',
+      landingPage: '/api/landing-page',
+      digitalAudit: '/api/digital-audit',
     },
   });
 });

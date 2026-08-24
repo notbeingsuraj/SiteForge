@@ -52,3 +52,121 @@ router.get('/', (req, res, next) => {
     next(error);
   }
 });
+
+
+/**
+ * GET /api/leads/:id
+ * Get full lead details by ID
+ */
+router.get('/:id', (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const lead = leadCache.get(id);
+    
+    if (!lead) {
+      return res.status(404).json({ 
+        error: 'Lead not found' 
+      });
+    }
+
+    res.json({
+      success: true,
+      data: lead,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * PUT /api/leads/:id
+ * Update lead (status, notes, etc.)
+ */
+router.put('/:id', (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const lead = leadCache.get(id);
+    
+    if (!lead) {
+      return res.status(404).json({ 
+        error: 'Lead not found' 
+      });
+    }
+
+    const allowedUpdates = ['status', 'leadName', 'internalNotes', 'customInstructions'];
+    const updates = Object.keys(req.body)
+      .filter(key => allowedUpdates.includes(key))
+      .reduce((obj, key) => {
+        obj[key] = req.body[key];
+        return obj;
+      }, {});
+
+    const updatedLead = { ...lead, ...updates, updatedAt: new Date().toISOString() };
+    leadCache.set(id, updatedLead);
+
+    res.json({
+      success: true,
+      data: updatedLead,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * DELETE /api/leads/:id
+ * Delete a lead
+ */
+router.delete('/:id', (req, res, next) => {
+  try {
+    const { id } = req.params;
+    
+    if (!leadCache.has(id)) {
+      return res.status(404).json({ 
+        error: 'Lead not found' 
+      });
+    }
+
+    leadCache.delete(id);
+
+    res.json({
+      success: true,
+      message: 'Lead deleted successfully',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/leads/:id/brand-dna
+ * Regenerate brand DNA for a lead
+ */
+router.post('/:id/brand-dna', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const lead = leadCache.get(id);
+    
+    if (!lead) {
+      return res.status(404).json({ 
+        error: 'Lead not found' 
+      });
+    }
+
+    const brandDNA = await BrandStrategyService.generateBrandDNA(lead.analysis.businessData);
+    
+    // Update lead with new brand DNA
+    lead.analysis.brandDNA = brandDNA;
+    lead.updatedAt = new Date().toISOString();
+    leadCache.set(id, lead);
+
+    res.json({
+      success: true,
+      data: brandDNA,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+export default router;

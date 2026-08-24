@@ -253,7 +253,9 @@ class BusinessDataExtractor {
       openGraph: this.extractOpenGraph(html),
       visibleText: this.extractVisibleText(html),
     };
-/**
+  }
+
+  /**
    * Build AI extraction prompt
    */
   buildExtractionPrompt(metadata, sourceUrl) {
@@ -424,55 +426,3 @@ Rules:
 }
 
 export default new BusinessDataExtractor();
-- "business_type" should be one of: "local_business", "service", "restaurant", "retail", "healthcare", "professional_services", "other"
-- If coordinates are in JSON-LD or microdata, extract them
-- The "description" should be from the business's own description, not AI-generated`;
-  }
-
-  /**
-   * Call AI to extract structured business profile
-   */
-  async extractWithAI(metadata, sourceUrl) {
-    const { AIService } = await import('./AIService.js');
-    
-    const prompt = this.buildExtractionPrompt(metadata, sourceUrl);
-    
-    const result = await AIService.generate({
-      prompt,
-      model: 'fast',
-      schema: true,
-      temperature: 0.1,
-      maxTokens: 3000,
-    });
-    
-    return result;
-  }
-
-  /**
-   * Validate and clean extracted profile
-   */
-  validateProfile(profile) {
-    const validated = { ...profile };
-    
-    const requiredKeys = ['business', 'contact', 'location', 'ratings', 'hours', 'reviews', 'services', 'products', 'amenities', 'social_links', 'confidence'];
-    for (const key of requiredKeys) {
-      if (!validated[key]) validated[key] = {};
-    }
-    
-    const clean = (obj) => {
-      if (obj === null || obj === undefined) return null;
-      if (typeof obj === 'string') return obj.trim() || null;
-      if (Array.isArray(obj)) return obj.filter(v => v !== null && v !== '').map(clean);
-      if (typeof obj === 'object') {
-        const cleaned = {};
-        for (const [k, v] of Object.entries(obj)) {
-          cleaned[k] = clean(v);
-        }
-        return cleaned;
-      }
-      return obj;
-    };
-    
-    return clean(validated);
-  }
-  }
