@@ -22,7 +22,7 @@ class BrandStrategyService {
         model: 'reasoning',
         schema: true,
         temperature: 0.7,
-        maxTokens: 3000,
+        maxTokens: 6000,
       });
 
       const latency = Date.now() - startTime;

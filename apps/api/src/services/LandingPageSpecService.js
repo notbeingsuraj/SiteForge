@@ -14,7 +14,7 @@ class LandingPageSpecService {
         model: 'reasoning',
         schema: true,
         temperature: 0.5,
-        maxTokens: 4000,
+        maxTokens: 8000,
       });
       const latency = Date.now() - startTime;
       this.validateSpec(spec);

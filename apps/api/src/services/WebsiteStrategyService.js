@@ -14,7 +14,7 @@ class WebsiteStrategyService {
         model: 'reasoning',
         schema: true,
         temperature: 0.6,
-        maxTokens: 3500,
+        maxTokens: 7000,
       });
       const latency = Date.now() - startTime;
       this.validateStrategy(strategy);

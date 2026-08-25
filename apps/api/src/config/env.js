@@ -19,9 +19,9 @@ export const config = {
     baseUrl: process.env.OMNIROUTE_BASE_URL || 'http://localhost:20128/v1',
     models: {
       fast: process.env.OMNIROUTE_FAST_MODEL || 'hy3-free',
-      reasoning: process.env.OMNIROUTE_REASONING_MODEL || 'auto/best-reasoning',
+      reasoning: process.env.OMNIROUTE_REASONING_MODEL || 'hy3-free',
       coding: process.env.OMNIROUTE_CODING_MODEL || 'auto/best-coding',
-      copywriting: process.env.OMNIROUTE_COPYWRITING_MODEL || 'auto/best-chat',
+      copywriting: process.env.OMNIROUTE_COPYWRITING_MODEL || 'hy3-free',
     },
   },
   rateLimit: {
