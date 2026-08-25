@@ -236,8 +236,8 @@ class BusinessResearchService {
 
   extractVerifiedFacts(data) {
     const facts = [];
-    if (data.name) facts.push({ claim: `Business name is ${data.name}`, source: 'google_maps', verified: true });
-    if (data.rating) facts.push({ claim: `Has a rating of ${data.rating}/5`, source: 'google_maps', verified: true });
+    if (data.name) facts.push({ claim: `Business name is ${data.name}`, source: 'google_maps_public_data', verified: true });
+    if (data.rating) facts.push({ claim: `Has a rating of ${data.rating}/5`, source: 'google_maps_public_data', verified: true });
     return facts;
   }
 
@@ -247,45 +247,6 @@ class BusinessResearchService {
     if (!data.phone && !data.formatted_phone_number) unknowns.push('phone');
     if (!data.email) unknowns.push('email');
     return unknowns;
-  }
-
-  validateGoogleMapsUrl(url) {
-    try {
-      const parsed = new URL(url);
-      return ['maps.google.com', 'www.google.com', 'google.com', 'goo.gl', 'maps.app.goo.gl'].includes(parsed.hostname);
-    } catch {
-      return false;
-    }
-  }
-
-  async resolveGoogleMapsUrl(url) {
-    const originalUrl = new URL(url);
-    let resolvedUrl = url;
-    try {
-      const response = await fetch(url, { redirect: 'follow' });
-      resolvedUrl = response.url || url;
-    } catch {
-      // The Places search below can still resolve a valid, non-shortened URL.
-    }
-
-    const parsed = new URL(resolvedUrl);
-    const placeId = originalUrl.searchParams.get('place_id')
-      || originalUrl.searchParams.get('query_place_id')
-      || parsed.searchParams.get('place_id')
-      || parsed.searchParams.get('query_place_id');
-    const embeddedPlaceId = (url.match(/!1s(ChIJ[^!&]+)/)?.[1])
-      || (resolvedUrl.match(/!1s(ChIJ[^!&]+)/)?.[1])
-      || null;
-    const query = originalUrl.searchParams.get('query')
-      || parsed.searchParams.get('query')
-      || this.extractPlaceName(originalUrl.pathname)
-      || this.extractPlaceName(parsed.pathname);
-    return { placeId: placeId || embeddedPlaceId, query, resolvedUrl };
-  }
-
-  extractPlaceName(pathname) {
-    const placeMatch = pathname.match(/\/(?:place|search)\/([^/]+)/i);
-    return placeMatch ? decodeURIComponent(placeMatch[1]).replace(/\+/g, ' ') : null;
   }
 }
 

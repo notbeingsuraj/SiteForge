@@ -1,6 +1,7 @@
 import express from 'express';
 import DigitalAuditService from '../services/DigitalAuditService.js';
 import BusinessResearchService from '../services/BusinessResearchService.js';
+import BusinessDataExtractor from '../services/BusinessDataExtractor.js';
 
 const router = express.Router();
 
@@ -50,7 +51,6 @@ router.post('/extract-and-audit', async (req, res, next) => {
     }
 
     // First extract business data
-    const { default: BusinessDataExtractor } = await import('../services/BusinessDataExtractor.js');
     const extractedData = await BusinessDataExtractor.extractFromGoogleMapsUrl(googleMapsUrl);
     const businessData = await BusinessResearchService.extractBusinessIntelligence(extractedData);
     
