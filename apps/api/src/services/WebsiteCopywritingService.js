@@ -14,7 +14,7 @@ class WebsiteCopywritingService {
         model: 'reasoning',
         schema: true,
         temperature: 0.7,
-        maxTokens: 3000,
+        maxTokens: 7000,
       });
       const latency = Date.now() - startTime;
       this.validateCopy(copy);

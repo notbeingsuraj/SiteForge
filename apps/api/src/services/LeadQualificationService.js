@@ -14,7 +14,7 @@ class LeadQualificationService {
         model: 'reasoning',
         schema: true,
         temperature: 0.4,
-        maxTokens: 2000,
+        maxTokens: 5000,
       });
       const latency = Date.now() - startTime;
       this.validateQualification(qualification);
