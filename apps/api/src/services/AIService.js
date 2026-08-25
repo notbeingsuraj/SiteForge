@@ -56,7 +56,20 @@ class AIService {
         console.log('[AI] Prompt Data Size:', prompt.length);
       }
       const response = await this.client.post('/chat/completions', payload);
-      const content = response.data?.choices?.[0]?.message?.content;
+      const message = response.data?.choices?.[0]?.message;
+      let content = message?.content;
+
+      // Fallback: some reasoning models put output in reasoning_content
+      // when response_format is json_object or max_tokens is tight.
+      if ((!content || !content.trim()) && message?.reasoning_content) {
+        // Try to extract JSON from the reasoning_content if present
+        const reasoning = message.reasoning_content;
+        const jsonMatch = reasoning.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          content = jsonMatch[0];
+        }
+      }
+
       if (typeof content !== 'string' || !content.trim()) {
         throw new Error('AI provider returned an empty response');
       }
