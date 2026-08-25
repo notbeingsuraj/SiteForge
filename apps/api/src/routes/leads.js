@@ -12,6 +12,102 @@ const router = express.Router();
 const leadCache = new Map();
 
 /**
+ * POST /api/leads
+ * Create a new lead from a Google Maps URL
+ * 
+ * Body: { googleMapsUrl, leadName?, internalNotes?, customInstructions? }
+ * Returns: Full lead object with business analysis, brand DNA, digital audit
+ */
+router.post('/', async (req, res, next) => {
+  try {
+    const { googleMapsUrl, leadName, internalNotes, customInstructions } = req.body;
+    
+    if (!googleMapsUrl) {
+      return res.status(400).json({ 
+        error: 'googleMapsUrl is required' 
+      });
+    }
+
+    // Validate URL format
+    const isValid = BusinessDataExtractor.validateGoogleMapsUrl(googleMapsUrl);
+    if (!isValid) {
+      return res.status(400).json({ 
+        error: 'Invalid Google Maps URL format',
+        code: 'INVALID_URL'
+      });
+    }
+
+    // Extract business data
+    const extractedData = await BusinessDataExtractor.extractFromGoogleMapsUrl(googleMapsUrl);
+    
+    // Transform to normalized BusinessProfile
+    const businessData = await BusinessResearchService.extractBusinessIntelligence(extractedData);
+
+    // Build Business DNA
+    const brandDNA = await BrandStrategyService.generateBusinessDNA(businessData);
+
+    // Perform digital audit
+    const audit = await DigitalAuditService.auditDigitalPresence(businessData);
+
+    // Create lead object
+    const leadId = uuidv4();
+    const lead = {
+      _id: leadId,
+      leadName: leadName || businessData.identity?.name || 'Unnamed Business',
+      internalNotes: internalNotes || '',
+      customInstructions: customInstructions || '',
+      status: 'new',
+      source: {
+        googleMapsUrl,
+        extractedAt: extractedData.metadata?.extractedAt || new Date().toISOString(),
+      },
+      businessName: businessData.identity?.name || null,
+      businessCategory: businessData.identity?.category || null,
+      location: businessData.location?.city ? {
+        city: businessData.location.city,
+        state: businessData.location.state,
+        country: businessData.location.country,
+      } : null,
+      contact: businessData.contact ? {
+        phone: businessData.contact.phone,
+        email: businessData.contact.email,
+        website: businessData.contact.website,
+      } : null,
+      businessData: {
+        rating: businessData.rating,
+        reviewCount: businessData.reviewCount,
+        services: businessData.services,
+        openingHours: businessData.openingHours,
+        trustSignals: businessData.trustSignals,
+        facts: businessData.facts,
+        unknowns: businessData.unknowns,
+      },
+      analysis: {
+        businessData,
+        brandDNA,
+        audit,
+        extractedAt: new Date().toISOString(),
+      },
+      opportunityScore: {
+        total: audit.overallScore || 0,
+        priority: audit.overallScore >= 70 ? 'high' : audit.overallScore >= 40 ? 'medium' : 'low',
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    leadCache.set(leadId, lead);
+
+    res.status(201).json({
+      success: true,
+      data: lead,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * GET /api/leads
  * List all leads with optional pagination
  * 

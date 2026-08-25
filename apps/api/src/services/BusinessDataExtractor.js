@@ -482,6 +482,79 @@ Rules:
   }
 
   /**
+   * Validate and clean extracted profile
+   */
+  validateProfile(profile) {
+    if (!profile || typeof profile !== 'object') {
+      throw new Error('Invalid profile: not an object');
+    }
+
+    const validated = {
+      business: {
+        name: profile.business?.name ?? null,
+        category: profile.business?.category ?? null,
+        categories: Array.isArray(profile.business?.categories) ? profile.business.categories : [],
+        description: profile.business?.description ?? null,
+        business_type: profile.business?.business_type ?? null,
+      },
+      contact: {
+        phone: profile.contact?.phone ?? null,
+        email: profile.contact?.email ?? null,
+        website: profile.contact?.website ?? null,
+      },
+      location: {
+        full_address: profile.location?.full_address ?? null,
+        street: profile.location?.street ?? null,
+        city: profile.location?.city ?? null,
+        state: profile.location?.state ?? null,
+        country: profile.location?.country ?? null,
+        postal_code: profile.location?.postal_code ?? null,
+        latitude: typeof profile.location?.latitude === 'number' ? profile.location.latitude : null,
+        longitude: typeof profile.location?.longitude === 'number' ? profile.location.longitude : null,
+      },
+      ratings: {
+        rating: typeof profile.ratings?.rating === 'number' ? profile.ratings.rating : null,
+        review_count: typeof profile.ratings?.review_count === 'number' ? profile.ratings.review_count : null,
+      },
+      hours: {
+        monday: profile.hours?.monday ?? null,
+        tuesday: profile.hours?.tuesday ?? null,
+        wednesday: profile.hours?.wednesday ?? null,
+        thursday: profile.hours?.thursday ?? null,
+        friday: profile.hours?.friday ?? null,
+        saturday: profile.hours?.saturday ?? null,
+        sunday: profile.hours?.sunday ?? null,
+      },
+      reviews: Array.isArray(profile.reviews) ? profile.reviews : [],
+      services: Array.isArray(profile.services) ? profile.services : [],
+      products: Array.isArray(profile.products) ? profile.products : [],
+      amenities: Array.isArray(profile.amenities) ? profile.amenities : [],
+      social_links: Array.isArray(profile.social_links) ? profile.social_links : [],
+      pricing: profile.pricing ?? null,
+      booking_url: profile.booking_url ?? null,
+      source_urls: Array.isArray(profile.source_urls) ? profile.source_urls : [],
+      confidence: {
+        overall: typeof profile.confidence?.overall === 'number' ? Math.max(0, Math.min(1, profile.confidence.overall)) : 0,
+        name: typeof profile.confidence?.name === 'number' ? Math.max(0, Math.min(1, profile.confidence.name)) : 0,
+        category: typeof profile.confidence?.category === 'number' ? Math.max(0, Math.min(1, profile.confidence.category)) : 0,
+        phone: typeof profile.confidence?.phone === 'number' ? Math.max(0, Math.min(1, profile.confidence.phone)) : 0,
+        website: typeof profile.confidence?.website === 'number' ? Math.max(0, Math.min(1, profile.confidence.website)) : 0,
+        address: typeof profile.confidence?.address === 'number' ? Math.max(0, Math.min(1, profile.confidence.address)) : 0,
+        rating: typeof profile.confidence?.rating === 'number' ? Math.max(0, Math.min(1, profile.confidence.rating)) : 0,
+      },
+    };
+
+    // Convert empty strings to null
+    Object.keys(validated).forEach(key => {
+      if (typeof validated[key] === 'string' && validated[key].trim() === '') {
+        validated[key] = null;
+      }
+    });
+
+    return validated;
+  }
+
+  /**
    * Main extraction method
    */
   async extractFromGoogleMapsUrl(googleMapsUrl) {
