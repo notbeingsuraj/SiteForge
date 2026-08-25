@@ -41,6 +41,7 @@ class AIService {
         ],
         temperature,
         max_tokens: maxTokens,
+        stream: false,
       };
 
       // If schema is provided, request structured JSON output
