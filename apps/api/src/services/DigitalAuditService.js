@@ -36,7 +36,7 @@ class DigitalAuditService {
         model: 'reasoning',
         schema: true,
         temperature: 0.5, // Lower temperature for consistent scoring
-        maxTokens: 2500,
+        maxTokens: 5000,
       });
 
       const latency = Date.now() - startTime;

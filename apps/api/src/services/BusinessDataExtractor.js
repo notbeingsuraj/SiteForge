@@ -513,7 +513,7 @@ Rules:
         model: 'reasoning',
         schema,
         temperature: 0.1,
-        maxTokens: 4000,
+        maxTokens: 6000,
       });
       return result;
     } catch (error) {

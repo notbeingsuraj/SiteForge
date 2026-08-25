@@ -28,7 +28,7 @@ class AIService {
    * @param {number} options.temperature - Temperature (0-2)
    * @param {number} options.maxTokens - Max tokens to generate
    */
-  async generate({ prompt, model = 'fast', schema = null, temperature = 0.7, maxTokens = 2000 }) {
+  async generate({ prompt, model = 'fast', schema = null, temperature = 0.7, maxTokens = 4000 }) {
     try {
       if (!config.omniroute.apiKey) throw new Error('Missing OMNIROUTE_API_KEY');
       const payload = {
