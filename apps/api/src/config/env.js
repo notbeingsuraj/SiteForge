@@ -16,7 +16,7 @@ export const config = {
   debugBusinessAnalysis: process.env.DEBUG_BUSINESS_ANALYSIS === 'true',
   omniroute: {
     apiKey: process.env.OMNIROUTE_API_KEY,
-    baseUrl: process.env.OMNIROUTE_BASE_URL || 'https://api.omniroute.ai/v1',
+    baseUrl: process.env.OMNIROUTE_BASE_URL || 'http://localhost:20128/v1',
     models: {
       fast: process.env.OMNIROUTE_FAST_MODEL || 'auto/coding',
       reasoning: process.env.OMNIROUTE_REASONING_MODEL || 'auto/coding',
