@@ -15,6 +15,7 @@ class WebsiteStrategyService {
         schema: true,
         temperature: 0.6,
         maxTokens: 7000,
+        systemPrompt: `You are a senior conversion-focused website strategist. Using the Business DNA and digital audit, design the ideal website strategy for this business. Return strict JSON with websiteGoal, targetAudience, primaryCTA, secondaryCTA, pages, homepageSections, trustStrategy, conversionStrategy, seoStrategy, visualDirection, contentStrategy, mobileStrategy, implementationNotes. IMPORTANT: Return ONLY valid JSON. No markdown, no explanations.`,
       });
       const latency = Date.now() - startTime;
       this.validateStrategy(strategy);

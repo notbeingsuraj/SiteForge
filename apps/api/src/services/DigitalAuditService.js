@@ -37,6 +37,7 @@ class DigitalAuditService {
         schema: true,
         temperature: 0.5, // Lower temperature for consistent scoring
         maxTokens: 5000,
+        systemPrompt: `You are a senior digital marketing analyst and web auditor. Ruthlessly evaluate the business's digital presence. Score website quality, mobile experience, SEO, and conversion effectiveness. Return strict JSON with websiteExists, websiteUrl, categories (design, mobile, navigation, conversion, trust, seo, localSeo, content, branding, performance, contactAccessibility), overallScore, criticalIssues, recommendations, opportunityGap. IMPORTANT: Return ONLY valid JSON. No markdown, no explanations.`,
       });
 
       const latency = Date.now() - startTime;
