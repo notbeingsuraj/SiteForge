@@ -23,6 +23,7 @@ class BrandStrategyService {
         schema: true,
         temperature: 0.7,
         maxTokens: 6000,
+        systemPrompt: `You are a senior brand strategist and local-business growth consultant. Analyze the supplied business information. Your objective is to determine the commercial and branding DNA of the business. Return strict JSON following the structure with fields: businessIdentity, audience, customerIntent, painPoints, purchaseTriggers, services, competitiveAdvantages, trustSignals, brandPersonality, toneOfVoice, visualDirection, positioning, websiteObjectives, conversionStrategy, strategicRecommendations, confidence. IMPORTANT: Return ONLY valid JSON. No markdown, no explanations, no extra text.`,
       });
 
       const latency = Date.now() - startTime;
