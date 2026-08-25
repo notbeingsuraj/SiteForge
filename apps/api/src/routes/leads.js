@@ -44,7 +44,7 @@ router.post('/', async (req, res, next) => {
     const businessData = await BusinessResearchService.extractBusinessIntelligence(extractedData);
 
     // Build Business DNA
-    const brandDNA = await BrandStrategyService.generateBusinessDNA(businessData);
+    const brandDNA = await BrandStrategyService.generateBrandDNA(businessData);
 
     // Perform digital audit
     const audit = await DigitalAuditService.auditDigitalPresence(businessData);

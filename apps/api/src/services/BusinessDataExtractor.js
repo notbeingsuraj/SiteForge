@@ -147,7 +147,64 @@ class BusinessDataExtractor {
   /**
    * Fetch page content with retries
    */
+  /**
+   * Validate URL to prevent SSRF attacks
+   */
+  validateFetchUrl(url) {
+    try {
+      const parsed = new URL(url);
+      
+      // Only allow HTTPS
+      if (parsed.protocol !== "https:") {
+        throw new Error("Only HTTPS URLs are allowed");
+      }
+      
+      // Block private/internal IPs
+      const hostname = parsed.hostname.toLowerCase();
+      
+      // Block localhost and common internal hostnames
+      const blockedHostnames = ["localhost", "localhost.localdomain", "local"];
+      if (blockedHostnames.includes(hostname)) {
+        throw new Error("Localhost URLs are not allowed");
+      }
+      
+      // Block private IP ranges
+      // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8, 169.254.0.0/16
+      const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+      if (ipv4Regex.test(hostname)) {
+        const parts = hostname.split(".").map(Number);
+        if (
+          parts[0] === 10 ||
+          parts[0] === 127 ||
+          (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+          (parts[0] === 192 && parts[1] === 168) ||
+          (parts[0] === 169 && parts[1] === 254)
+        ) {
+          throw new Error("Private IP addresses are not allowed");
+        }
+      }
+      
+      // Block IPv6 loopback and link-local
+      if (hostname === "::1" || hostname.startsWith("fe80:")) {
+        throw new Error("IPv6 internal addresses are not allowed");
+      }
+      
+      return true;
+    } catch (error) {
+      if (error.message.includes("not allowed") || error.message.includes("Only HTTPS")) {
+        throw error;
+      }
+      throw new Error("Invalid URL format");
+    }
+  }
+
+  /**
+   * Fetch page content with retries
+   */
   async fetchPage(url, retryCount = 0) {
+    // Validate URL to prevent SSRF
+    this.validateFetchUrl(url);
+
     try {
       const response = await this.client.get(url);
       return {

@@ -40,7 +40,7 @@ router.post('/analyze', async (req, res, next) => {
     // Build Business DNA using existing BrandStrategyService
     // (imported lazily to avoid circular deps if needed)
     const { default: BrandStrategyService } = await import('../services/BrandStrategyService.js');
-    const businessDNA = await BrandStrategyService.generateBusinessDNA(business);
+    const businessDNA = await BrandStrategyService.generateBrandDNA(business);
 
     res.json({
       success: true,
