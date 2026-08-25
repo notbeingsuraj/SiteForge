@@ -28,17 +28,25 @@ class AIService {
    * @param {number} options.temperature - Temperature (0-2)
    * @param {number} options.maxTokens - Max tokens to generate
    */
-  async generate({ prompt, model = 'fast', schema = null, temperature = 0.7, maxTokens = 4000 }) {
+  async generate({ prompt, model = 'fast', schema = null, temperature = 0.7, maxTokens = 4000, systemPrompt = null }) {
     try {
       if (!config.omniroute.apiKey) throw new Error('Missing OMNIROUTE_API_KEY');
+      
+      const messages = [];
+      
+      // Add system prompt if provided (especially important for reasoning models)
+      if (systemPrompt) {
+        messages.push({ role: 'system', content: systemPrompt });
+      }
+      
+      messages.push({
+        role: 'user',
+        content: prompt,
+      });
+
       const payload = {
         model: this.selectModel(model),
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
+        messages,
         temperature,
         max_tokens: maxTokens,
         stream: false,
