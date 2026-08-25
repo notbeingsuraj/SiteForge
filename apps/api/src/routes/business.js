@@ -1,7 +1,6 @@
 import express from 'express';
 import BusinessResearchService from '../services/BusinessResearchService.js';
 import BusinessDataExtractor from '../services/BusinessDataExtractor.js';
-import GoogleMapsService from '../services/GoogleMapsService.js';
 
 const router = express.Router();
 
@@ -23,7 +22,7 @@ router.post('/research', async (req, res, next) => {
     }
 
     // Validate URL format
-    const isValid = GoogleMapsService.validateUrl(googleMapsUrl);
+    const isValid = BusinessResearchService.validateGoogleMapsUrl(googleMapsUrl);
     if (!isValid) {
       return res.status(400).json({ 
         error: 'Invalid Google Maps URL format' 

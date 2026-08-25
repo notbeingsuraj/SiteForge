@@ -1,4 +1,16 @@
 
+import express from 'express';
+import { v4 as uuidv4 } from 'uuid';
+import BusinessDataExtractor from '../services/BusinessDataExtractor.js';
+import BusinessResearchService from '../services/BusinessResearchService.js';
+import BrandStrategyService from '../services/BrandStrategyService.js';
+import DigitalAuditService from '../services/DigitalAuditService.js';
+
+const router = express.Router();
+
+// In-memory lead cache (in production, use database)
+const leadCache = new Map();
+
 /**
  * GET /api/leads
  * List all leads with optional pagination

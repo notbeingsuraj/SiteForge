@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { config } from '../config/env.js';
 import { createHash } from 'crypto';
+import AIService from './AIService.js';
 
 /**
  * Business Data Extractor
@@ -344,7 +345,143 @@ Rules:
 - For "reviews", only include reviews explicitly found in the source data with {author, rating, text, date}
 - For "hours", use 24-hour format strings like "09:00-17:00" or "closed"
 - For "categories", use specific business types from the data
-/**
+`
+  }
+
+  /**
+   * Extract structured business profile using AI
+   */
+  async extractWithAI(metadata, sourceUrl) {
+    const prompt = this.buildExtractionPrompt(metadata, sourceUrl);
+    
+    // Define the JSON schema for structured output
+    const schema = {
+      type: 'object',
+      properties: {
+        business: {
+          type: 'object',
+          properties: {
+            name: { type: ['string', 'null'] },
+            category: { type: ['string', 'null'] },
+            categories: { type: 'array', items: { type: 'string' } },
+            description: { type: ['string', 'null'] },
+            business_type: { type: ['string', 'null'] }
+          },
+          required: ['name', 'category', 'categories', 'description', 'business_type']
+        },
+        contact: {
+          type: 'object',
+          properties: {
+            phone: { type: ['string', 'null'] },
+            email: { type: ['string', 'null'] },
+            website: { type: ['string', 'null'] }
+          },
+          required: ['phone', 'email', 'website']
+        },
+        location: {
+          type: 'object',
+          properties: {
+            full_address: { type: ['string', 'null'] },
+            street: { type: ['string', 'null'] },
+            city: { type: ['string', 'null'] },
+            state: { type: ['string', 'null'] },
+            country: { type: ['string', 'null'] },
+            postal_code: { type: ['string', 'null'] },
+            latitude: { type: ['number', 'null'] },
+            longitude: { type: ['number', 'null'] }
+          },
+          required: ['full_address', 'street', 'city', 'state', 'country', 'postal_code', 'latitude', 'longitude']
+        },
+        ratings: {
+          type: 'object',
+          properties: {
+            rating: { type: ['number', 'null'] },
+            review_count: { type: ['number', 'null'] }
+          },
+          required: ['rating', 'review_count']
+        },
+        hours: {
+          type: 'object',
+          properties: {
+            monday: { type: ['string', 'null'] },
+            tuesday: { type: ['string', 'null'] },
+            wednesday: { type: ['string', 'null'] },
+            thursday: { type: ['string', 'null'] },
+            friday: { type: ['string', 'null'] },
+            saturday: { type: ['string', 'null'] },
+            sunday: { type: ['string', 'null'] }
+          },
+          required: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+        },
+        reviews: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              author: { type: 'string' },
+              rating: { type: 'number' },
+              text: { type: 'string' },
+              date: { type: 'string' }
+            },
+            required: ['author', 'rating', 'text', 'date']
+          }
+        },
+        services: { type: 'array', items: { type: 'string' } },
+        products: { type: 'array', items: { type: 'string' } },
+        amenities: { type: 'array', items: { type: 'string' } },
+        social_links: { type: 'array', items: { type: 'string' } },
+        pricing: { type: ['string', 'null'] },
+        booking_url: { type: ['string', 'null'] },
+        source_urls: { type: 'array', items: { type: 'string' } },
+        confidence: {
+          type: 'object',
+          properties: {
+            overall: { type: ['number', 'null'] },
+            name: { type: ['number', 'null'] },
+            category: { type: ['number', 'null'] },
+            phone: { type: ['number', 'null'] },
+            website: { type: ['number', 'null'] },
+            address: { type: ['number', 'null'] },
+            rating: { type: ['number', 'null'] }
+          },
+          required: ['overall', 'name', 'category', 'phone', 'website', 'address', 'rating']
+        }
+      },
+      required: ['business', 'contact', 'location', 'ratings', 'hours', 'reviews', 'services', 'products', 'amenities', 'social_links', 'pricing', 'booking_url', 'source_urls', 'confidence']
+    };
+
+    try {
+      const result = await AIService.generate({
+        prompt,
+        model: 'reasoning',
+        schema,
+        temperature: 0.1,
+        maxTokens: 4000,
+      });
+      return result;
+    } catch (error) {
+      console.error('[BusinessDataExtractor] AI extraction failed:', error.message);
+      // Return a minimal valid structure on failure
+      return {
+        business: { name: null, category: null, categories: [], description: null, business_type: null },
+        contact: { phone: null, email: null, website: null },
+        location: { full_address: null, street: null, city: null, state: null, country: null, postal_code: null, latitude: null, longitude: null },
+        ratings: { rating: null, review_count: null },
+        hours: { monday: null, tuesday: null, wednesday: null, thursday: null, friday: null, saturday: null, sunday: null },
+        reviews: [],
+        services: [],
+        products: [],
+        amenities: [],
+        social_links: [],
+        pricing: null,
+        booking_url: null,
+        source_urls: [sourceUrl],
+        confidence: { overall: 0, name: 0, category: 0, phone: 0, website: 0, address: 0, rating: 0 }
+      };
+    }
+  }
+
+  /**
    * Main extraction method
    */
   async extractFromGoogleMapsUrl(googleMapsUrl) {
