@@ -1,2 +1,2 @@
-zsh: command not found: console.log('STRUCTURED JSON:', JSON.stringify(result));
-zsh: command not found: console.log('STRUCTURED JSON:', JSON.stringify(result));
+zsh: command not found: BusinessDataExtractor.extractFromGoogleMapsUrl(url).then(r => console.log(JSON.stringify(r, null, 2))).catch(console.error);
+zsh: command not found: BusinessDataExtractor.extractFromGoogleMapsUrl(url).then(r => console.log(JSON.stringify(r, null, 2))).catch(console.error);
