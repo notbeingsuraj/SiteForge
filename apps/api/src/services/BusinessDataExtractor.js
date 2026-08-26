@@ -25,6 +25,17 @@ class BusinessDataExtractor {
       maxRedirects: 5,
       validateStatus: (status) => status < 500,
     });
+
+    // Separate client for r.jina.ai proxy (no redirects, simpler)
+    this.proxyClient = axios.create({
+      timeout: config.extraction.timeout,
+      headers: {
+        'User-Agent': config.extraction.userAgent,
+        'Accept': 'text/plain, text/markdown, */*',
+      },
+      maxRedirects: 3,
+      validateStatus: (status) => status < 500,
+    });
   }
 
   /**
