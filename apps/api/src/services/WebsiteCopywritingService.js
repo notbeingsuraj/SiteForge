@@ -15,6 +15,7 @@ class WebsiteCopywritingService {
         schema: true,
         temperature: 0.7,
         maxTokens: 7000,
+        systemPrompt: `You are a senior conversion copywriter specializing in local business websites. Generate compelling, concise website copy that drives action. Return strict JSON with hero, services, about, trust, faq, finalCTA, metadata. IMPORTANT: Return ONLY valid JSON. No markdown, no explanations.`,
       });
       const latency = Date.now() - startTime;
       this.validateCopy(copy);

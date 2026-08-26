@@ -15,6 +15,7 @@ class QualityAssuranceService {
         schema: true,
         temperature: 0.3,
         maxTokens: 6000,
+        systemPrompt: `You are a senior quality assurance reviewer for digital agency deliverables. Review the generated outputs against actual business data. Detect fabricated facts, fake testimonials, unsupported claims, and generic copy. Return strict JSON with passed, severity, score, issues, fixes, summary. IMPORTANT: Return ONLY valid JSON. No markdown, no explanations.`,
       });
       const latency = Date.now() - startTime;
       this.validateQAResults(qaResults);

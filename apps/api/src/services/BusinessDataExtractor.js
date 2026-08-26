@@ -514,6 +514,7 @@ Rules:
         schema,
         temperature: 0.1,
         maxTokens: 6000,
+        systemPrompt: `You are a business information extractor. Analyze the following data retrieved from a Google Maps page and extract structured business information. Return ONLY valid JSON matching the exact schema provided. No markdown, no explanations, no extra text.`,
       });
       return result;
     } catch (error) {

@@ -15,6 +15,7 @@ class SalesOutreachService {
         schema: true,
         temperature: 0.7,
         maxTokens: 5000,
+        systemPrompt: `You are a senior sales strategist specializing in outreach for digital agencies. Generate personalized, professional outreach messages for business owners. Return strict JSON with whatsapp, email, instagramDM, callOpening, followUp, metadata. IMPORTANT: Return ONLY valid JSON. No markdown, no explanations.`,
       });
       const latency = Date.now() - startTime;
       this.validateOutreach(outreach);

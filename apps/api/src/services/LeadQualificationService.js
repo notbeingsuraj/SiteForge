@@ -15,6 +15,7 @@ class LeadQualificationService {
         schema: true,
         temperature: 0.4,
         maxTokens: 5000,
+        systemPrompt: `You are a senior business development analyst specializing in lead qualification for digital agencies. Calculate an opportunity score (0-100) based on business data, digital audit, and brand DNA. Return strict JSON with score, priority, breakdown, reasons, salesAngle, recommendedApproach, estimatedCloseRate, estimatedValue. IMPORTANT: Return ONLY valid JSON. No markdown, no explanations.`,
       });
       const latency = Date.now() - startTime;
       this.validateQualification(qualification);
