@@ -41,10 +41,55 @@ class BusinessResearchService {
     const hours = data.hours || {};
     const metadata = data.metadata || {};
 
+    // Determine resolution status based on URL type and placeId availability
+    const originalUrl = metadata.originalUrl || metadata.sourceUrl || '';
+    const placeId = metadata.placeId || null;
+    const isSearchUrl = originalUrl.includes('/search/');
+    const isPlaceUrl = originalUrl.includes('/place/');
+    
+    let resolutionStatus = 'unresolved';
+    let resolutionConfidence = 0;
+    let query = null;
+    let resolvedName = null;
+    
+    if (isSearchUrl) {
+      // Search URL - extract query but no placeId
+      const urlObj = new URL(originalUrl);
+      query = urlObj.searchParams.get('query');
+      resolutionStatus = 'unresolved';
+      resolutionConfidence = 0;
+      resolvedName = business.name || null;
+    } else if (isPlaceUrl) {
+      if (placeId && this.isValidPlaceId(placeId)) {
+        // Place URL with valid placeId
+        resolutionStatus = 'resolved';
+        resolutionConfidence = data.confidence?.overall || 0.8;
+        resolvedName = business.name || null;
+      } else if (placeId && placeId.startsWith('cid:')) {
+        // Place URL with CID - partially resolved
+        resolutionStatus = 'resolved';
+        resolutionConfidence = (data.confidence?.overall || 0.6);
+        resolvedName = business.name || null;
+      } else {
+        // Place URL but no extractable placeId
+        resolutionStatus = 'ambiguous';
+        resolutionConfidence = 0.3;
+        resolvedName = business.name || null;
+      }
+    } else {
+      // Unknown URL type
+      resolutionStatus = 'invalid';
+      resolutionConfidence = 0;
+    }
+
     const intelligence = {
       source: {
-        placeId: metadata.placeId || null,
-        mapsUrl: metadata.originalUrl || metadata.sourceUrl || null,
+        query: query,
+        placeId: placeId,
+        resolvedName: resolvedName,
+        resolutionStatus: resolutionStatus,
+        resolutionConfidence: resolutionConfidence,
+        mapsUrl: originalUrl || null,
       },
       identity: {
         name: business.name,
@@ -70,7 +115,7 @@ class BusinessResearchService {
         } : null,
       },
       digitalPresence: {
-        googleMapsUrl: metadata.originalUrl || metadata.sourceUrl || null,
+        googleMapsUrl: originalUrl || null,
         website: contact.website || null,
         socialProfiles: { facebook: null, instagram: null, twitter: null, linkedin: null },
         hasWebsite: !!contact.website,
@@ -94,6 +139,17 @@ class BusinessResearchService {
     };
 
     return intelligence;
+  }
+
+  /**
+   * Check if a placeId is a valid Google Place ID (not a synthetic one)
+   */
+  isValidPlaceId(placeId) {
+    if (!placeId || typeof placeId !== 'string') return false;
+    if (placeId.startsWith('query:')) return false;
+    if (placeId.startsWith('cid:')) return true; // CID is a valid identifier
+    // Standard Place ID format
+    return placeId.startsWith('ChIJ') && placeId.length >= 27;
   }
 /**
    * Extract from legacy Google Places API format (for backward compatibility)
