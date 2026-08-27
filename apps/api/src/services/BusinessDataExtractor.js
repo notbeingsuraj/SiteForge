@@ -135,22 +135,17 @@ class BusinessDataExtractor {
       
       // 3. Extract from /data/ path - supports both ChIJ... and 0x...:0x... formats
       // Pattern: !1s<place_id> where place_id can be ChIJ... or 0x...:0x...
-      const dataPathMatch = url.match(/\/data=.*?!1s([^!&]+)/);
-      if (dataPathMatch?.[1]) {
-        const candidate = dataPathMatch[1];
+      // Find ALL !1s occurrences and validate each
+      const allMatches = url.matchAll(/!1s([^!&]+)/g);
+      for (const match of allMatches) {
+        const candidate = match[1];
         // Validate it's a legitimate place ID format (ChIJ... or 0x...:0x...)
         if (this.isValidPlaceIdFormat(candidate)) {
           return candidate;
         }
       }
       
-      // 4. Check for place_id in URL path (older format: /place/.../data=!1s...)
-      const pathPlaceIdMatch = url.match(/!1s(ChIJ[^!&]+)/);
-      if (pathPlaceIdMatch?.[1]) {
-        return pathPlaceIdMatch[1];
-      }
-
-      // 5. For search URLs with query parameter - DO NOT create synthetic placeId
+      // 4. For search URLs with query parameter - DO NOT create synthetic placeId
       // Return null to indicate no extractable place ID
       return null;
     } catch {
