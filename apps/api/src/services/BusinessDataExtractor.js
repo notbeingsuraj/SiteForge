@@ -115,31 +115,69 @@ class BusinessDataExtractor {
 
   /**
    * Extract place ID from Google Maps URL
+   * Supports:
+   * - place_id query parameter (standard Place ID: ChIJ...)
+   * - CID in query parameter (cid:...)
+   * - Place ID in /data/ path (ChIJ... or 0x...:0x... format)
+   * - query parameter (for search URLs - returns null, not synthetic ID)
    */
   extractPlaceId(url) {
     try {
       const parsed = new URL(url);
+      
+      // 1. Check for explicit place_id parameter (ChIJ... format)
       let placeId = parsed.searchParams.get('place_id') || parsed.searchParams.get('query_place_id');
+      if (placeId) return placeId;
       
-      if (!placeId) {
-        const pathMatch = url.match(/!1s(ChIJ[^!&]+)/);
-        placeId = pathMatch?.[1] || null;
+      // 2. Check for CID in query parameter
+      const cid = parsed.searchParams.get('cid');
+      if (cid) return `cid:${cid}`;
+      
+      // 3. Extract from /data/ path - supports both ChIJ... and 0x...:0x... formats
+      // Pattern: !1s<place_id> where place_id can be ChIJ... or 0x...:0x...
+      const dataPathMatch = url.match(/\/data=.*?!1s([^!&]+)/);
+      if (dataPathMatch?.[1]) {
+        const candidate = dataPathMatch[1];
+        // Validate it's a legitimate place ID format (ChIJ... or 0x...:0x...)
+        if (this.isValidPlaceIdFormat(candidate)) {
+          return candidate;
+        }
       }
       
-      if (!placeId) {
-        const cid = parsed.searchParams.get('cid');
-        if (cid) placeId = `cid:${cid}`;
-      }
-      
-      if (!placeId) {
-        const query = parsed.searchParams.get('query');
-        if (query) placeId = `query:${query}`;
+      // 4. Check for place_id in URL path (older format: /place/.../data=!1s...)
+      const pathPlaceIdMatch = url.match(/!1s(ChIJ[^!&]+)/);
+      if (pathPlaceIdMatch?.[1]) {
+        return pathPlaceIdMatch[1];
       }
 
-      return placeId;
+      // 5. For search URLs with query parameter - DO NOT create synthetic placeId
+      // Return null to indicate no extractable place ID
+      return null;
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Validate if a string is a legitimate Google Place ID format
+   * - ChIJ... format (standard Place ID)
+   * - 0x...:0x... format (CID/Place ID in data path)
+   */
+  isValidPlaceIdFormat(candidate) {
+    if (!candidate || typeof candidate !== 'string') return false;
+    
+    // Standard Google Place ID format: ChIJ followed by base64-like chars
+    if (candidate.startsWith('ChIJ') && candidate.length >= 27) {
+      return true;
+    }
+    
+    // CID format: 0x<hex>:0x<hex> (e.g., 0x390feb5b7b7b7b7b:0x1234567890abcdef)
+    const cidRegex = /^0x[0-9a-fA-F]+:0x[0-9a-fA-F]+$/;
+    if (cidRegex.test(candidate)) {
+      return true;
+    }
+    
+    return false;
   }
 
   /**
