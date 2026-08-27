@@ -149,7 +149,11 @@ class BusinessResearchService {
     if (placeId.startsWith('query:')) return false;
     if (placeId.startsWith('cid:')) return true; // CID is a valid identifier
     // Standard Place ID format
-    return placeId.startsWith('ChIJ') && placeId.length >= 27;
+    if (placeId.startsWith('ChIJ') && placeId.length >= 27) return true;
+    // CID format: 0x<hex>:0x<hex> (e.g., 0x390feb5b7b7b7b7b:0x1234567890abcdef)
+    const cidRegex = /^0x[0-9a-fA-F]+:0x[0-9a-fA-F]+$/;
+    if (cidRegex.test(placeId)) return true;
+    return false;
   }
 /**
    * Extract from legacy Google Places API format (for backward compatibility)
