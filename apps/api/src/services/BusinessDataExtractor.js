@@ -244,15 +244,19 @@ class BusinessDataExtractor {
 
   /**
    * Fetch page content with retries
+   * Uses r.jina.ai proxy to render JavaScript-heavy Google Maps pages
    */
   async fetchPage(url, retryCount = 0) {
     // Validate URL to prevent SSRF
     this.validateFetchUrl(url);
 
+    // Use jina.ai proxy to extract content from JavaScript-rendered pages
+    const proxyUrl = `https://r.jina.ai/http://${url.replace(/^https?:\/\//, '')}`;
+
     try {
-      const response = await this.client.get(url);
+      const response = await this.proxyClient.get(proxyUrl);
       return {
-        url: response.request?.res?.responseUrl || response.config.url || url,
+        url,
         html: response.data,
         status: response.status,
         headers: response.headers,
@@ -260,19 +264,19 @@ class BusinessDataExtractor {
     } catch (error) {
       if (error.response) {
         return {
-          url: error.config?.url || url,
+          url,
           html: error.response.data || '',
           status: error.response.status,
           headers: error.response.headers,
           error: error.message,
         };
       }
-      
+
       if (retryCount < config.extraction.maxRetries) {
         await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
         return this.fetchPage(url, retryCount + 1);
       }
-      
+
       throw new Error(`Failed to fetch page: ${error.message}`);
     }
   }
