@@ -1,6 +1,55 @@
 import AIService from './AIService.js';
 import { buildLandingPageSpecPrompt } from '../prompts/landingPageSpec.js';
 
+const LANDING_PAGE_SPEC_SCHEMA = {
+  type: 'object',
+  required: ['pageTitle', 'pageDescription', 'primaryCTA', 'sections', 'theme', 'metadata'],
+  properties: {
+    pageTitle: { type: 'string' },
+    pageDescription: { type: 'string' },
+    primaryCTA: {
+      type: 'object',
+      required: ['text', 'action'],
+      properties: {
+        text: { type: 'string' },
+        action: { type: 'string', enum: ['contact', 'call', 'visit', 'book', 'order', 'directions', 'email', 'whatsapp'] },
+        reasoning: { type: 'string' },
+        placement: { type: 'array', items: { type: 'string' } }
+      }
+    },
+    sections: {
+      type: 'array',
+      minItems: 5,
+      items: {
+        type: 'object',
+        required: ['id', 'type', 'purpose', 'priority', 'visibility', 'layout', 'content', 'styling'],
+        properties: {
+          id: { type: 'string' },
+          type: { type: 'string', enum: ['navigation', 'hero', 'trustIndicators', 'services', 'valueProposition', 'about', 'testimonials', 'gallery', 'faq', 'location', 'cta', 'footer'] },
+          purpose: { type: 'string' },
+          priority: { type: 'string', enum: ['essential', 'recommended', 'optional'] },
+          visibility: { type: 'string', enum: ['always', 'visible', 'above-fold', 'mobile'] },
+          layout: { type: 'string' },
+          content: { type: 'object' },
+          cta: { type: ['object', 'null'] },
+          styling: { type: 'object' }
+        }
+      }
+    },
+    theme: {
+      type: 'object',
+      required: ['style', 'colorPalette', 'typography', 'imageryStyle'],
+      properties: {
+        style: { type: 'string' },
+        colorPalette: { type: 'object' },
+        typography: { type: 'object' },
+        imageryStyle: { type: 'string' }
+      }
+    },
+    metadata: { type: 'object' }
+  }
+};
+
 class LandingPageSpecService {
   async generateSpec(brandDNA, websiteStrategy, digitalAudit, options = {}) {
     try {
