@@ -26,7 +26,7 @@ async function test() {
   const prompt = buildLandingPageSpecPrompt(brandDNA, websiteStrategy, digitalAudit);
   console.log('Prompt length:', prompt.length);
   
-  // Direct API call to see raw response
+  // Direct API call with higher max_tokens
   const client = axios.create({
     baseURL: config.omniroute.baseUrl,
     headers: {
@@ -42,7 +42,7 @@ async function test() {
       { role: 'user', content: prompt },
     ],
     temperature: 0.5,
-    max_tokens: 8000,
+    max_tokens: 16000,
     stream: false,
     response_format: { type: 'json_object' },
   };
@@ -50,8 +50,10 @@ async function test() {
   console.log('\n=== SENDING REQUEST ===');
   const response = await client.post('/chat/completions', payload);
   const message = response.data?.choices?.[0]?.message;
-  console.log('Content:', message?.content);
-  console.log('Reasoning content:', message?.reasoning_content?.substring(0, 2000));
+  console.log('Content length:', message?.content?.length);
+  console.log('Reasoning content length:', message?.reasoning_content?.length);
+  console.log('Full Content:', message?.content);
+  console.log('\nFull Reasoning (first 5000):', message?.reasoning_content?.substring(0, 5000));
 }
 
 test().catch(console.error);
