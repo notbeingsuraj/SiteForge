@@ -57,7 +57,7 @@ async function runFullPipeline(url, label) {
   console.log('Website Strategy keys:', Object.keys(websiteStrategy));
   console.log('Strategy:', websiteStrategy.strategy);
   
-  const landingPageSpec = await LandingPageSpecService.generateSpec(websiteStrategy, brandDNA, businessData);
+  const landingPageSpec = await LandingPageSpecService.generateSpec(brandDNA, websiteStrategy, digitalAudit);
   console.log('Landing Page Spec keys:', Object.keys(landingPageSpec));
   const heroSection = landingPageSpec.sections.find(s => s.type === 'hero');
   console.log('Hero:', heroSection);
