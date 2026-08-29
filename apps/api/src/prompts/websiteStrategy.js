@@ -145,7 +145,72 @@ CRITICAL RULES:
 5. Keep it simple - most small businesses need simple sites
 6. Prioritize conversion over creativity
 
-OUTPUT FORMAT: Return strict JSON with websiteGoal, targetAudience, primaryCTA, secondaryCTA, pages, homepageSections, trustStrategy, conversionStrategy, seoStrategy, visualDirection, contentStrategy, mobileStrategy, implementationNotes.
+OUTPUT FORMAT: Return strict JSON with the following exact structure:
+
+{
+  "websiteGoal": "string - concise goal statement",
+  "targetAudience": {
+    "segment": "string",
+    "demographics": {"ageRange": "string|null", "income": "string|null", "location": "string"},
+    "psychographics": {"values": ["string"], "lifestyle": "string|null"}
+  },
+  "primaryCTA": {
+    "action": "string - e.g. 'contact', 'book', 'order', 'quote', 'call'",
+    "text": "string - button text like 'Call Now', 'Book Appointment'",
+    "reasoning": "string - why this CTA",
+    "placement": ["string"] - e.g. ["home", "contact", "header"]
+  },
+  "secondaryCTA": {
+    "action": "string - e.g. 'view', 'learn', 'directions'",
+    "text": "string - button text",
+    "reasoning": "string"
+  },
+  "pages": [
+    {"name": "string", "priority": "essential|recommended|optional", "purpose": "string", "keyContent": ["string"]}
+  ],
+  "homepageSections": [
+    {"section": "string", "order": "number", "purpose": "string", "keyMessages": ["string"], "ctaIncluded": "boolean"}
+  ],
+  "trustStrategy": [
+    {"element": "string", "source": "verified|inferred|suggested", "impact": "high|medium|low", "details": "string"}
+  ],
+  "conversionStrategy": {
+    "primaryGoal": "string",
+    "conversionFunnel": ["string"],
+    "frictionPoints": ["string"],
+    "persuasionTactics": ["string"]
+  },
+  "seoStrategy": {
+    "primaryKeywords": ["string"],
+    "localKeywords": ["string"],
+    "quickWins": ["string"],
+    "schemaMarkup": ["string"]
+  },
+  "visualDirection": {
+    "style": "string - professional|friendly|luxury|energetic|natural",
+    "colorPalette": {"primary": "string", "secondary": "string", "accent": "string"},
+    "typography": {"heading": "string", "body": "string"},
+    "imageryStyle": "string"
+  },
+  "contentStrategy": {
+    "headlineApproach": "string",
+    "copyTone": "string",
+    "contentGaps": ["string"],
+    "priorityPages": ["string"]
+  },
+  "mobileStrategy": {
+    "clickToCall": "boolean",
+    "simplifiedNav": "boolean",
+    "fastLoadOptimizations": ["string"],
+    "locationOneTap": "boolean"
+  },
+  "implementationNotes": {
+    "estimatedComplexity": "simple|moderate|complex",
+    "contentNeeds": ["string"],
+    "technicalRequirements": ["string"],
+    "maintenanceConsiderations": ["string"]
+  }
+}
 
 IMPORTANT: Return ONLY valid JSON. No markdown, no explanations. Base everything on actual business data.`;
 
