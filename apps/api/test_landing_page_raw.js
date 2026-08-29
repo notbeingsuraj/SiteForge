@@ -5,7 +5,7 @@ import WebsiteStrategyService from './src/services/WebsiteStrategyService.js';
 import AIService from './src/services/AIService.js';
 import { buildLandingPageSpecPrompt } from './src/prompts/landingPageSpec.js';
 import axios from 'axios';
-import { config } from '../config/env.js';
+import { config } from './src/config/env.js';
 
 const url = 'https://www.google.com/maps/place/Nilkamal+Homes/@30.9003452,75.85667325,17z/data=!3m1!4b1!4m6!3m5!1s0x390feb5b7b7b7b7b:0x1234567890abcdef!8m2!3d30.9003452!4d75.85667325!16s%2Fg%2F11c5q8v7z';
 
