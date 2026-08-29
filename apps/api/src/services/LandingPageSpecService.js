@@ -17,11 +17,6 @@ class LandingPageSpecService {
         maxTokens: 16000,
         systemPrompt: `You are a senior UX designer, conversion strategist and frontend information architect. Generate a structured landing-page specification for a local business. Return ONLY valid JSON with pageTitle, pageDescription, primaryCTA, sections, theme, metadata. IMPORTANT: Return ONLY valid JSON. No markdown, no explanations.`,
       });
-      
-      // DEBUG: Log the raw spec before validation
-      console.log("=== RAW LANDING PAGE SPEC BEFORE VALIDATION ===");
-      console.log(JSON.stringify(spec, null, 2));
-      
       const latency = Date.now() - startTime;
       this.validateSpec(spec);
       await AIService.logAICall({
