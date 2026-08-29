@@ -1,753 +1,1093 @@
-clear screen
-# SiteForge
+<div align="center">
 
-## Detailed Requirements Document
+# ⚡ SITEFORGE
 
-**Version:** 1.0
+### `AI-POWERED BUSINESS → WEBSITE ENGINEERING SYSTEM`
 
----
+<br>
 
-# 1. System Architecture
+<img src="https://img.shields.io/badge/STATUS-ACTIVE%20DEVELOPMENT-00ff9d?style=for-the-badge&labelColor=050505">
+<img src="https://img.shields.io/badge/AI-ORCHESTRATION-ff00ff?style=for-the-badge&labelColor=050505">
+<img src="https://img.shields.io/badge/BACKEND-NODE.JS-00ffff?style=for-the-badge&labelColor=050505">
+<img src="https://img.shields.io/badge/ARCHITECTURE-MODULAR-ff6b00?style=for-the-badge&labelColor=050505">
+<img src="https://img.shields.io/badge/TESTING-PIPELINE%20VALIDATED-9dff00?style=for-the-badge&labelColor=050505">
 
-```text
-                     ┌───────────────────┐
-                     │      User         │
-                     └─────────┬─────────┘
-                               │
-                               ▼
-                     ┌───────────────────┐
-                     │   React Frontend  │
-                     └─────────┬─────────┘
-                               │
-                          REST API
-                               │
-                               ▼
-                     ┌───────────────────┐
-                     │ Node / Express    │
-                     │ Backend           │
-                     └─────────┬─────────┘
-                               │
-             ┌─────────────────┼─────────────────┐
-             │                 │                 │
-             ▼                 ▼
-        Business Data       AI Engine
-        Processing          OmniRoute
-             │                 │
-             ▼                 ▼
-        External APIs      LLM Providers
-```
-
----
-
-# 2. Technology Stack
-
-## Frontend
-
-* React
-* Vite
-* Tailwind CSS
-* React Router
-* TanStack Query
-* Zustand where necessary
-* Zod
-* Lucide React
-
-## Backend
-
-* Node.js
-* Express
-* JWT
-* Helmet
-* express-rate-limit
-* Zod/Joi
-
-## AI
-
-OmniRoute as the unified model gateway.
-
-Possible model roles:
-
-### Reasoning
-
-Strong reasoning model.
-
-### Coding
-
-Claude/GPT-class coding model.
-
-### Fast extraction
-
-Cheap/fast model.
-
-### Copywriting
-
-Strong general-purpose model.
-
-Do not hard-code your application to one model provider.
-
----
-
-# 3. Monorepo Structure
-
-Recommended:
+<br><br>
 
 ```text
-siteforge/
-│
-├── apps/
-│   ├── web/
-│   └── api/
-│
-├── packages/
-│   ├── ui/
-│   ├── types/
-│   ├── prompts/
-│   ├── config/
-│   └── validators/
-│
-├── docs/
-│
-├── .env.example
-├── package.json
-└── README.md
-```
+███████╗██╗████████╗███████╗███████╗ ██████╗ ██████╗  ██████╗ ███████╗
+██╔════╝██║╚══██╔══╝██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝
+███████╗██║   ██║   █████╗  █████╗  ██║   ██║██████╔╝██║  ███╗█████╗
+╚════██║██║   ██║   ██╔══╝  ██╔══╝  ██║   ██║██╔══██╗██║   ██║██╔══╝
+███████║██║   ██║   ███████╗███████╗╚██████╔╝██║  ██║╚██████╔╝███████╗
+╚══════╝╚═╝   ╚═╝   ╚══════╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+TURN RAW BUSINESS SIGNALS INTO STRUCTURED WEB EXPERIENCES.
+<br>
 
----
+Business Data → Intelligence → Brand DNA → Strategy → Specification → Website
 
-# 4. Backend Architecture
+<br>
 
-```text
-src/
-│
-├── config/
-│
-├── controllers/
-│
-├── services/
-│
-├── models/
-│
-├── routes/
-│
-├── middleware/
-│
-├── validators/
-│
-├── prompts/
-│
-├── utils/
-│
-├── workers/
-│
-└── app.js
-```
+SiteForge is not built around the assumption that AI is reliable.
 
----
+It is built around the assumption that AI is powerful, probabilistic, occasionally wrong, and therefore needs software engineering around it.
 
-# 5. Service Architecture
+<br>
 
-Separate business logic into services.
+ARCHITECTURE ·
+PIPELINE ·
+ENGINEERING ·
+TESTING ·
+ROADMAP
 
-```text
-GoogleMapsService
-BusinessResearchService
-WebsiteAuditService
-BusinessDNAService
-OpportunityScoringService
-WebsiteStrategyService
-LandingPageService
-OutreachService
-PricingService
-LeadService
-AIService
-```
+</div>
+> SYSTEM STATUS
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         SITEFORGE // CORE                                │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  INPUT                                                                   │
+│    │                                                                     │
+│    ▼                                                                     │
+│  Google Maps / Business URL                                              │
+│    │                                                                     │
+│    ▼                                                                     │
+│  ┌──────────────────────┐                                                │
+│  │ BUSINESS DATA ENGINE │                                                │
+│  └──────────┬───────────┘                                                │
+│             │                                                            │
+│             ▼                                                            │
+│  ┌──────────────────────┐                                                │
+│  │    BRAND DNA ENGINE  │                                                │
+│  └──────────┬───────────┘                                                │
+│             │                                                            │
+│             ▼                                                            │
+│  ┌──────────────────────┐                                                │
+│  │ WEBSITE STRATEGY     │                                                │
+│  │ ENGINE               │                                                │
+│  └──────────┬───────────┘                                                │
+│             │                                                            │
+│             ▼                                                            │
+│  ┌──────────────────────┐                                                │
+│  │ LANDING PAGE SPEC    │                                                │
+│  │ ENGINE               │                                                │
+│  └──────────┬───────────┘                                                │
+│             │                                                            │
+│             ▼                                                            │
+│  ┌──────────────────────┐                                                │
+│  │ WEBSITE GENERATION   │                                                │
+│  └──────────┬───────────┘                                                │
+│             │                                                            │
+│             ▼                                                            │
+│         GENERATED SITE                                                    │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+01 // SYSTEM ARCHITECTURE
 
-This matters because putting everything into Express controllers is how a promising codebase becomes a haunted house.
+SiteForge decomposes website generation into independent engineering stages.
 
----
+                              ┌────────────────────┐
+                              │       CLIENT       │
+                              └─────────┬──────────┘
+                                        │
+                                        ▼
+                              ┌────────────────────┐
+                              │    WEB FRONTEND    │
+                              └─────────┬──────────┘
+                                        │
+                                        ▼
+                              ┌────────────────────┐
+                              │      API LAYER     │
+                              └─────────┬──────────┘
+                                        │
+                 ┌──────────────────────┼──────────────────────┐
+                 │                      │                      │
+                 ▼                      ▼                      ▼
+        ┌────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+        │ BUSINESS DATA  │    │ BRAND DNA        │    │ AI PROVIDER     │
+        │ EXTRACTION     │    │ ENGINE           │    │ ABSTRACTION     │
+        └───────┬────────┘    └────────┬─────────┘    └────────┬────────┘
+                │                      │                       │
+                └──────────────────────┼───────────────────────┘
+                                       │
+                                       ▼
+                             ┌────────────────────┐
+                             │ WEBSITE STRATEGY  │
+                             │ ENGINE             │
+                             └─────────┬──────────┘
+                                       │
+                                       ▼
+                             ┌────────────────────┐
+                             │ LANDING PAGE SPEC  │
+                             │ ENGINE             │
+                             └─────────┬──────────┘
+                                       │
+                                       ▼
+                             ┌────────────────────┐
+                             │ WEBSITE GENERATOR  │
+                             └─────────┬──────────┘
+                                       │
+                             ┌─────────┴─────────┐
+                             ▼                   ▼
+                    ┌────────────────┐   ┌────────────────┐
+                    │ ASSET STORAGE  │   │ DEPLOYMENT     │
+                    │                │   │ LAYER          │
+                    └────────────────┘   └────────────────┘
+Architecture philosophy
 
-# 6. Processing Pipeline
+The system deliberately separates:
 
-```text
-Google Maps URL
-       │
-       ▼
-URL Validation
-       │
-       ▼
-Business Resolution
-       │
-       ▼
-Data Collection
-       │
-       ▼
-Data Normalization
-       │
-       ▼
-Website Audit
-       │
-       ▼
-Business DNA
-       │
-       ▼
-Opportunity Score
-       │
-       ▼
-Website Strategy
-       │
-       ▼
-Landing Page Specification
-       │
-       ▼
-Landing Page Renderer
-       │
-       ▼
-Outreach Generation
-       │
-       ▼
-Lead Saved
-```
+DATA
+ ↓
+REASONING
+ ↓
+STRATEGY
+ ↓
+SPECIFICATION
+ ↓
+GENERATION
 
----
+This makes each stage independently testable, replaceable and debuggable.
 
-# 7. Important Architecture Decision
+02 // THE SITEFORGE PIPELINE
+01 — BUSINESS DATA EXTRACTION
+GOOGLE MAPS URL
+      │
+      ▼
+┌─────────────────────────────┐
+│ BusinessDataExtractor       │
+├─────────────────────────────┤
+│ • Place identification      │
+│ • Business name             │
+│ • Category                  │
+│ • Coordinates               │
+│ • Address                   │
+│ • Phone                     │
+│ • Website                   │
+│ • Rating                    │
+│ • Review count              │
+│ • Hours                     │
+│ • Source information        │
+└─────────────────────────────┘
 
-Do NOT have the LLM directly generate the final React application.
+External business information is transformed into a structured internal representation.
 
-Instead:
+The important part is not merely extracting data.
 
-```text
-Business Data
-      ↓
-Business DNA JSON
-      ↓
-Website Strategy JSON
-      ↓
-Landing Page Schema
-      ↓
-React Renderer
-```
+It is normalizing messy external information into predictable application state.
 
-This gives you predictable output.
+02 — BUSINESS INTELLIGENCE
+
+Raw business data is not yet useful website strategy.
+
+SiteForge transforms extracted information into a deeper representation of the business:
+
+BUSINESS
+   │
+   ├── Identity
+   ├── Audience
+   ├── Intent
+   ├── Services
+   ├── Competitive Context
+   ├── Trust Signals
+   ├── Customer Problems
+   └── Purchase Triggers
+03 — BRAND DNA
+
+The Brand DNA layer attempts to understand:
+
+┌──────────────────────────────────────────┐
+│               BRAND DNA                  │
+├──────────────────────────────────────────┤
+│ Business Identity                        │
+│ Audience                                 │
+│ Customer Intent                          │
+│ Pain Points                              │
+│ Purchase Triggers                        │
+│ Services                                 │
+│ Competitive Advantages                   │
+│ Trust Signals                            │
+│ Brand Personality                        │
+│ Tone of Voice                            │
+│ Visual Direction                         │
+│ Positioning                              │
+│ Website Objectives                       │
+│ Conversion Strategy                      │
+│ Strategic Recommendations                │
+│ Confidence                               │
+└──────────────────────────────────────────┘
+
+The result becomes an intermediate representation for downstream reasoning.
+
+04 — WEBSITE STRATEGY
+
+The strategy layer answers:
+
+WHO IS THE WEBSITE FOR?
+WHAT SHOULD IT COMMUNICATE?
+WHAT SHOULD THE USER DO?
+WHY SHOULD THEY TRUST THE BUSINESS?
+HOW SHOULD THE EXPERIENCE BE STRUCTURED?
+
+The strategy model includes concepts such as:
+
+websiteGoal
+targetAudience
+primaryCTA
+secondaryCTA
+pages
+homepageSections
+trustStrategy
+conversionStrategy
+seoStrategy
+visualDirection
+contentStrategy
+mobileStrategy
+implementationNotes
+metadata
+
+This separation is intentional.
+
+BRAND DNA
+    ≠
+WEBSITE STRATEGY
+
+Brand DNA describes the business.
+
+Website strategy determines how that understanding becomes a website.
+
+05 — LANDING PAGE SPECIFICATION
+
+The strategy is converted into a structured page specification.
 
 Example:
 
-```json
 {
-  "hero": {
-    "headline": "...",
-    "subheadline": "...",
-    "primaryCTA": "...",
-    "secondaryCTA": "..."
+  "pageTitle": "Business Website",
+  "pageDescription": "A business-focused local website",
+  "primaryCTA": {
+    "action": "contact",
+    "text": "Enquire Now"
   },
   "sections": [
-    "trust",
-    "services",
-    "about",
-    "reviews",
-    "gallery",
-    "location",
-    "faq",
-    "cta"
+    {
+      "type": "navigation"
+    },
+    {
+      "type": "hero"
+    },
+    {
+      "type": "trustIndicators"
+    },
+    {
+      "type": "services"
+    },
+    {
+      "type": "valueProposition"
+    },
+    {
+      "type": "about"
+    },
+    {
+      "type": "faq"
+    },
+    {
+      "type": "location"
+    },
+    {
+      "type": "cta"
+    },
+    {
+      "type": "footer"
+    }
   ]
 }
-```
 
-Your React frontend renders this schema.
+The generator receives a structured contract, not an arbitrary paragraph from an LLM.
 
-The AI controls **content and configuration**, while your application controls **structure and code**.
+That distinction matters.
 
----
+06 — WEBSITE GENERATION
+LANDING PAGE SPEC
+        │
+        ▼
+┌─────────────────────────┐
+│ WEBSITE GENERATOR       │
+├─────────────────────────┤
+│ Structure               │
+│ Content                 │
+│ Styling                 │
+│ Components              │
+│ Responsive behavior     │
+└───────────┬─────────────┘
+            │
+            ▼
+      GENERATED WEBSITE
 
-# 8. Data Models (In-Memory / Stateless)
+The architecture keeps planning separate from generation.
 
-Since SiteForge is now a stateless application with no database persistence, the following data structures represent the in-memory objects used during request processing. They are not persisted between requests.
+That makes regeneration, debugging and versioning considerably less painful.
 
-## Lead (Transient)
+03 // THE BUSINESS DATA PROBLEM
 
-```text
-businessName
-businessCategory
-businessType
-location
-contact
-digitalPresence
-businessData
-businessDNA
-digitalAudit
-websiteStrategy
-generatedWebsite
-opportunityScore
+A business may provide:
+
+Name        ✓
+Coordinates ✓
+Category    ?
+Address     ?
+Phone       ?
+Website     ?
+Rating      ?
+Hours       ?
+Reviews     ?
+
+SiteForge therefore treats business information as data with confidence, not as unquestionable truth.
+
+Conceptually:
+
+VERIFIED     ✓
+INFERRED     ~
+UNKNOWN      ?
+UNAVAILABLE  ✕
+
+This is particularly important for AI-generated content.
+
+If the source data is weak, the generated website should not confidently manufacture facts.
+
+Humanity has enough misinformation already.
+
+04 // STATE ISOLATION
+
+Multi-business systems introduce a subtle but dangerous problem:
+
+Cross-business state contamination.
+
+A website generator that accidentally remembers the wrong business can produce something far worse than a crashed application.
+
+It can produce a beautiful, functional website for somebody else's business.
+
+SiteForge explicitly tests sequences such as:
+
+A → B → A → C
+
+Expected behavior:
+
+A1 === A2       ✓
+A  ≠ B          ✓
+A  ≠ C          ✓
+B  ≠ C          ✓
+
+Current isolation verification:
+
+┌──────────────────────────────────────┐
+│ A → B → A → C                       │
+├──────────────────────────────────────┤
+│ Place ID isolation       PASS  ✓     │
+│ Business name isolation  PASS  ✓     │
+└──────────────────────────────────────┘
+
+State isolation is not a cosmetic concern.
+
+It is a correctness requirement.
+
+05 // ENGINEERING PHILOSOPHY
+AI IS NOT THE ARCHITECTURE.
+
+The model is a component.
+
+The system is the architecture.
+
+A naive AI application:
+
+INPUT
+  ↓
+LLM
+  ↓
+MAGIC
+
+SiteForge aims for:
+
+INPUT
+  ↓
+STRUCTURE
+  ↓
+AI REASONING
+  ↓
+PARSE
+  ↓
+VALIDATE
+  ↓
+NORMALIZE
+  ↓
+CONTRACT
+  ↓
+NEXT SERVICE
+
+The fundamental principle is:
+
+AI output is untrusted input.
+
+06 // CONTRACT-DRIVEN AI
+
+AI models are probabilistic.
+
+Software contracts are deterministic.
+
+The system therefore places validation boundaries around AI output.
+
+                         ┌───────────────┐
+                         │    AI MODEL   │
+                         └───────┬───────┘
+                                 │
+                                 ▼
+                         ┌───────────────┐
+                         │  RAW OUTPUT   │
+                         └───────┬───────┘
+                                 │
+                                 ▼
+                         ┌───────────────┐
+                         │    PARSER     │
+                         └───────┬───────┘
+                                 │
+                                 ▼
+                         ┌───────────────┐
+                         │   VALIDATOR   │
+                         └───────┬───────┘
+                                 │
+                       ┌─────────┴─────────┐
+                       ▼                   ▼
+                    VALID                INVALID
+                       │                   │
+                       ▼                   ▼
+                   CONTINUE          RECOVER / RETRY
+
+Validation can detect:
+
+✗ Missing fields
+✗ Invalid JSON
+✗ Unexpected structures
+✗ Missing critical sections
+✗ Schema mismatch
+✗ Partial responses
+07 // CRITICAL PAGE CONTRACTS
+
+Landing pages are not accepted simply because an LLM returned something that vaguely resembles a website.
+
+Critical sections are explicitly validated.
+
+┌───────────────────────────────────────┐
+│      LANDING PAGE SPEC CONTRACT       │
+├───────────────────────────────────────┤
+│ navigation          REQUIRED          │
+│ hero                REQUIRED          │
+│ trustIndicators     REQUIRED / HIGH   │
+│ services            REQUIRED          │
+│ valueProposition    STRUCTURED        │
+│ about               STRUCTURED        │
+│ faq                 STRUCTURED        │
+│ location            STRUCTURED        │
+│ cta                 REQUIRED          │
+│ footer              REQUIRED          │
+└───────────────────────────────────────┘
+
+The actual specification stores these inside:
+
+spec.sections[]
+
+rather than assuming every section is a top-level property.
+
+For example:
+
+const hero = spec.sections.find(
+  section => section.type === "hero"
+);
+
+This is exactly the sort of small contract detail that prevents future debugging sessions from becoming archaeological expeditions through console logs.
+
+08 // TESTING & RELIABILITY
+
+SiteForge testing is designed around behavior and pipeline boundaries.
+
+                    ┌──────────────┐
+                    │    UNIT      │
+                    └──────┬───────┘
+                           │
+                           ▼
+                    ┌──────────────┐
+                    │ INTEGRATION  │
+                    └──────┬───────┘
+                           │
+                           ▼
+                    ┌──────────────┐
+                    │   PIPELINE   │
+                    └──────┬───────┘
+                           │
+                           ▼
+                    ┌──────────────┐
+                    │ END-TO-END   │
+                    └──────────────┘
+Current validation areas
+✓ Business data extraction
+✓ Place ID resolution
+✓ Business isolation
+✓ Place ID isolation
+✓ Business name isolation
+✓ Brand/strategy pipeline validation
+✓ Landing page specification validation
+✓ Critical section validation
+✓ Navigation section validation
+✓ Hero section retrieval
+
+The purpose is not simply to make tests turn green.
+
+The purpose is to prove that data survives the pipeline without silently changing meaning.
+
+09 // FAILURE MODES
+
+A production AI system must assume failure.
+
+┌──────────────────────────────────────────────────────────┐
+│                    FAILURE MATRIX                         │
+├───────────────────────────────┬──────────────────────────┤
+│ FAILURE                       │ SYSTEM RESPONSE           │
+├───────────────────────────────┼──────────────────────────┤
+│ Invalid JSON                  │ Parse / recover           │
+│ Missing required field        │ Reject / retry            │
+│ Schema mismatch               │ Validation failure        │
+│ AI timeout                    │ Retry / fallback          │
+│ Provider unavailable          │ Provider fallback         │
+│ Incomplete business data      │ Confidence handling       │
+│ State contamination           │ Isolation safeguards      │
+│ Generation failure            │ Observable failure        │
+│ Partial AI response           │ Reject / recover          │
+└───────────────────────────────┴──────────────────────────┘
+
+The goal is not:
+
+"Nothing will ever fail."
+
+The goal is:
+
+FAIL
+ ↓
+OBSERVE
+ ↓
+ISOLATE
+ ↓
+RECOVER
+ ↓
+TEST
+10 // OBSERVABILITY
+
+A production generation system should eventually answer:
+
+WHAT FAILED?
+WHERE?
+WHY?
+FOR WHICH BUSINESS?
+USING WHICH MODEL?
+ON WHICH ATTEMPT?
+HOW LONG DID IT TAKE?
+CAN IT BE RETRIED?
+
+A future generation record could contain:
+
+generation_id
+business_id
+service
+provider
+model
+attempt
+latency
 status
-internalNotes
-customInstructions
-createdAt (request timestamp)
-```
-
-## BusinessAnalysis (Transient)
-
-```text
-businessId (placeId from Google Maps)
-businessDNA
-digitalAudit
-websiteStrategy
-landingPageSpec
-websiteCopy
-opportunityScore
-generatedAt (request timestamp)
-```
-digitalAudit
-opportunityScore
-scoreReasons
-competitors
-createdAt
-```
-
-## websiteProjects
-
-```text
-_id
-businessId
-strategy
-landingPageSchema
-versions
-status
-createdAt
-updatedAt
-```
-
-## outreach
-
-```text
-_id
-businessId
-whatsapp
-email
-instagram
-callScript
-createdAt
-```
-
-## pricing
-
-```text
-_id
-name
-description
-price
-features
-active
-```
-
----
-
-# 9. API Endpoints
-
-## Authentication
-
-```text
-POST /api/auth/register
-POST /api/auth/login
-GET  /api/auth/me
-```
-
-## Business
-
-```text
-POST /api/business/analyse
-GET  /api/business/:id
-GET  /api/business/:id/analysis
-```
-
-## Website
-
-```text
-POST /api/websites/generate
-GET  /api/websites/:id
-POST /api/websites/:id/regenerate
-POST /api/websites/:id/versions
-```
-
-## Outreach
-
-```text
-POST /api/outreach/generate
-GET  /api/outreach/:businessId
-```
-
-## Leads
-
-```text
-GET    /api/leads
-POST   /api/leads
-GET    /api/leads/:id
-PATCH  /api/leads/:id
-DELETE /api/leads/:id
-```
-
-## Pricing
-
-```text
-GET /api/pricing
-POST /api/pricing
-PATCH /api/pricing/:id
-```
-
----
-
-# 10. Frontend Routes
-
-```text
-/login
-
-/
-/dashboard
-
-/leads
-/leads/:id
-
-/analyse
-
-/business/:id
-
-/business/:id/analysis
-
-/websites/:id
-
-/websites/:id/preview
-
-/websites/:id/outreach
-
-/settings
-```
-
----
-
-# 11. Dashboard UX
-
-Primary CTA:
-
-**Analyse Business**
-
-Input:
-
-```text
-Paste Google Maps URL
-[____________________________]
-
-        Analyse Business
-```
-
-After processing:
-
-```text
-Business
-↓
-Analysis
-↓
-Website
-↓
-Outreach
-↓
-Lead
-```
-
----
-
-# 12. Analysis UI
-
-Display:
-
-### Business Overview
-
-* Name
-* Category
-* Location
-* Rating
-* Reviews
-* Website
-
-### Opportunity
-
-Large score:
-
-```text
-87 / 100
-HIGH OPPORTUNITY
-```
-
-Then show reasons.
-
-### Digital Audit
-
-```text
-Website       Poor
-Mobile UX     Poor
-SEO           Weak
-CTA           Weak
-Branding      Average
-Trust         Strong
-```
-
-### Business DNA
-
-Cards:
-
-* Audience
-* Positioning
-* Services
-* Brand personality
-* Customer intent
-
----
-
-# 13. Website Generator UI
-
-Three-column layout:
-
-```text
-┌──────────┬───────────────────────────┬──────────────┐
-│ Sections │       Live Preview        │ AI Controls  │
-│          │                           │              │
-│ Hero     │       WEBSITE             │ Theme       │
-│ Services │       PREVIEW              │ CTA         │
-│ Reviews  │                           │ Layout       │
-│ About    │                           │ Regenerate   │
-│ Contact  │                           │              │
-└──────────┴───────────────────────────┴──────────────┘
-```
-
----
-
-# 14. Website Schema
-
-```json
-{
-  "theme": {
-    "style": "modern-local-premium",
-    "primaryColor": "#111111",
-    "accentColor": "#...",
-    "fontStyle": "modern"
-  },
-  "hero": {},
-  "trustBar": {},
-  "services": [],
-  "about": {},
-  "reviews": [],
-  "gallery": [],
-  "faq": [],
-  "location": {},
-  "cta": {},
-  "footer": {}
-}
-```
-
----
-
-# 15. AI Reliability Rules
-
-Every AI output must:
-
-1. Use structured JSON.
-2. Pass schema validation.
-3. Never invent business facts.
-4. Separate facts from inference.
-5. Identify missing data.
-6. Avoid fake testimonials.
-7. Avoid fake certifications.
-8. Avoid fabricated awards.
-9. Avoid unsupported claims.
-10. Return confidence levels where appropriate.
+error_code
+tokens
+estimated_cost
+timestamp
 
 Example:
 
-```json
-{
-  "fact": "Business has 4.7 rating",
-  "source": "google_maps",
-  "confidence": 1
-}
-```
+┌─────────────────────────────────────────────┐
+│ SITEFORGE // GENERATION TRACE              │
+├─────────────────────────────────────────────┤
+│ generation   gen_8F21                       │
+│ business     biz_102                       │
+│ stage        LandingPageSpec               │
+│ attempt      02                            │
+│ status       SUCCESS                       │
+│ latency      4.8s                          │
+│ provider     AI_PROVIDER                   │
+└─────────────────────────────────────────────┘
 
-versus:
+Observability transforms:
 
-```json
-{
-  "inference": "Customers likely value reliability",
-  "confidence": 0.72
-}
-```
+"Something broke."
 
----
+into:
 
-# 16. Error Handling
+"LandingPageSpec failed on attempt 1 because the model
+returned malformed JSON after 8.2 seconds."
 
-If business extraction fails:
+The second one can actually be fixed.
 
-```text
-Unable to analyse this business.
+11 // ENGINEERING PRINCIPLES
+┌──────────────────────────────────────────────────────────┐
+│                  SITEFORGE PRINCIPLES                    │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│  01  AI output is untrusted input.                      │
+│                                                          │
+│  02  Every important boundary has a contract.            │
+│                                                          │
+│  03  Business state must remain isolated.                │
+│                                                          │
+│  04  Failures must be observable.                        │
+│                                                          │
+│  05  Long-running work should become asynchronous jobs.  │
+│                                                          │
+│  06  Data quality should influence confidence.           │
+│                                                          │
+│  07  Generated websites should be versionable.            │
+│                                                          │
+│  08  Services should remain independently replaceable.   │
+│                                                          │
+│  09  Tests should validate behavior, not implementation. │
+│                                                          │
+│  10  Complexity must buy reliability.                    │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+12 // PROJECT STRUCTURE
+SiteForge/
+│
+├── apps/
+│   │
+│   ├── api/
+│   │   │
+│   │   ├── src/
+│   │   │   ├── services/
+│   │   │   │   ├── BusinessDataExtractor.js
+│   │   │   │   ├── BrandDNAService.js
+│   │   │   │   ├── BrandStrategyService.js
+│   │   │   │   ├── WebsiteStrategyService.js
+│   │   │   │   ├── LandingPageSpecService.js
+│   │   │   │   └── ...
+│   │   │   │
+│   │   │   └── ...
+│   │   │
+│   │   ├── tests/
+│   │   └── ...
+│   │
+│   └── web/
+│       └── ...
+│
+├── packages/
+│   ├── schemas/
+│   ├── core/
+│   └── ...
+│
+├── docs/
+│   ├── architecture/
+│   ├── pipeline/
+│   └── decisions/
+│
+├── .github/
+│   └── workflows/
+│
+├── .env.example
+├── CONTRIBUTING.md
+├── SECURITY.md
+└── README.md
+13 // DEVELOPMENT WORKFLOW
+                    ┌─────────────┐
+                    │   FEATURE   │
+                    └──────┬──────┘
+                           ▼
+                    ┌─────────────┐
+                    │ IMPLEMENT   │
+                    └──────┬──────┘
+                           ▼
+                    ┌─────────────┐
+                    │ UNIT TEST   │
+                    └──────┬──────┘
+                           ▼
+                    ┌─────────────┐
+                    │ INTEGRATION │
+                    └──────┬──────┘
+                           ▼
+                    ┌─────────────┐
+                    │ PIPELINE    │
+                    └──────┬──────┘
+                           ▼
+                    ┌─────────────┐
+                    │ E2E TEST    │
+                    └──────┬──────┘
+                           ▼
+                    ┌─────────────┐
+                    │   COMMIT    │
+                    └─────────────┘
 
-Reason:
-Business information could not be reliably retrieved.
+The development process favors small changes, explicit contracts and regression testing.
 
-Try another Google Maps URL.
-```
+14 // LOCAL DEVELOPMENT
+Requirements
+Node.js
+npm
+Git
+AI provider credentials
+Required external API credentials
+Clone
+git clone https://github.com/notbeingsuraj/SiteForge.git
 
-Do not silently generate fictional data.
+cd SiteForge
+Install
+npm install
+Environment
+cp .env.example .env
 
-If AI generation fails:
+Configure required credentials inside .env.
 
-* retry with fallback model
-* validate response
-* log failure
-* show partial results
-
----
-
-# 17. AI Pipeline
-
-Recommended model routing:
-
-```text
-Fast model
-    ↓
-Extraction / normalization
-
-Reasoning model
-    ↓
-Business analysis
-
-Strong model
-    ↓
-Website strategy
-
-Strong coding/content model
-    ↓
-Landing-page schema
-
-Fast model
-    ↓
-Outreach variations
-```
-
-OmniRoute should provide a single abstraction layer.
-
-Application code should call:
-
-```text
-AIService.generate(...)
-```
-
-rather than directly calling a specific provider everywhere.
-
----
-
-# 18. Observability
-
-Log:
-
-* request ID
-* business ID
-* model
-* prompt version
-* token usage
-* latency
-* error
-* retry count
-
-Store prompt versions.
-
-Example:
-
-```text
-business-dna-v1
-business-dna-v2
-website-strategy-v1
-outreach-v1
-```
-
-This will let you determine which prompts actually work rather than trusting the ancient human tradition of "this prompt feels better."
-
----
-
-# 19. Security
-
-Never send:
-
-* API keys
-* database credentials
-* JWT secrets
-
-to frontend.
-
-Use:
-
-```text
+Never commit secrets.
 .env
-```
+API KEYS
+ACCESS TOKENS
+DATABASE CREDENTIALS
+PRODUCTION SECRETS
 
-Backend only.
+belong outside source control.
 
-Implement:
+15 // AI SYSTEM DESIGN
 
-* Helmet
-* CORS
-* rate limiting
-* request validation
-* authentication middleware
-* authorization middleware
-* secure cookies or secure JWT strategy
+The AI layer is intentionally treated as a replaceable infrastructure component.
 
----
+                 ┌───────────────────────┐
+                 │     SITEFORGE CORE    │
+                 └───────────┬───────────┘
+                             │
+                             ▼
+                    ┌────────────────┐
+                    │   AI SERVICE   │
+                    │   ABSTRACTION  │
+                    └───────┬────────┘
+                            │
+               ┌────────────┼────────────┐
+               ▼            ▼            ▼
+           PROVIDER A   PROVIDER B   PROVIDER C
 
-# 20. V1 Development Order
+This allows the application architecture to remain independent from a single AI provider.
 
-### Phase 1
+Potential production behavior:
 
-Project setup.
+PRIMARY MODEL
+     │
+     ├── SUCCESS ───────────────► CONTINUE
+     │
+     └── FAILURE
+             │
+             ▼
+        RETRY POLICY
+             │
+             ▼
+        FALLBACK MODEL
+             │
+             ▼
+          CONTINUE
+16 // PRODUCTION ARCHITECTURE
 
-### Phase 2
+A scalable deployment model can evolve toward:
 
-Authentication.
+                         ┌───────────────┐
+                         │     USER      │
+                         └───────┬───────┘
+                                 │
+                                 ▼
+                         ┌───────────────┐
+                         │ CDN / EDGE    │
+                         └───────┬───────┘
+                                 │
+                    ┌────────────┴────────────┐
+                    ▼                         ▼
+             ┌──────────────┐         ┌──────────────┐
+             │ WEB FRONTEND │         │ API SERVER   │
+             └──────────────┘         └──────┬───────┘
+                                             │
+                                             ▼
+                                      ┌──────────────┐
+                                      │ JOB QUEUE    │
+                                      └──────┬───────┘
+                                             │
+                              ┌──────────────┴──────────────┐
+                              ▼                             ▼
+                       ┌──────────────┐              ┌──────────────┐
+                       │ AI WORKERS   │              │ DATA WORKERS │
+                       └──────┬───────┘              └──────────────┘
+                              │
+                              ▼
+                       ┌──────────────┐
+                       │ AI PROVIDERS │
+                       └──────────────┘
 
-### Phase 3
+                              │
+                              ▼
+                       ┌──────────────┐
+                       │ DATABASE     │
+                       └──────────────┘
 
-Lead database.
+                              │
+                              ▼
+                       ┌──────────────┐
+                       │ OBJECT       │
+                       │ STORAGE      │
+                       └──────────────┘
 
-### Phase 4
+Long-running AI generation should eventually be moved from ordinary HTTP request lifecycles into asynchronous jobs.
 
-Google Maps/business ingestion.
+17 // SCALABILITY
 
-### Phase 5
+The architecture can evolve from:
 
-AI Business DNA.
+SINGLE PROCESS
 
-### Phase 6
+toward:
 
-Opportunity scoring.
+              ┌─────────────┐
+              │ API SERVERS │
+              └──────┬──────┘
+                     │
+                     ▼
+              ┌─────────────┐
+              │ JOB QUEUE   │
+              └──────┬──────┘
+                     │
+            ┌────────┼────────┐
+            ▼        ▼        ▼
+         WORKER    WORKER    WORKER
+            │        │        │
+            └────────┼────────┘
+                     ▼
+               AI PROVIDERS
 
-### Phase 7
+Potential scaling mechanisms include:
 
-Website strategy.
+• Horizontal workers
+• Asynchronous generation
+• Retry policies
+• Idempotency
+• Rate limiting
+• Provider fallback
+• Caching
+• Generation versioning
+• Persistent job state
 
-### Phase 8
+These represent architectural direction unless explicitly marked as implemented.
 
-Landing-page renderer.
+18 // SECURITY
 
-### Phase 9
+Security boundaries should exist around:
 
-Outreach generation.
+External URLs
+API inputs
+AI-generated content
+Credentials
+Generated assets
+User accounts
+Deployment credentials
 
-### Phase 10
+Core principles:
 
-Dashboard polish.
+┌─────────────────────────────────────────┐
+│ SECURITY BASELINE                       │
+├─────────────────────────────────────────┤
+│ Never commit secrets                    │
+│ Validate external input                 │
+│ Use environment configuration           │
+│ Minimize credential privileges           │
+│ Sanitize generated content              │
+│ Rate-limit expensive operations         │
+│ Isolate customer/business state         │
+└─────────────────────────────────────────┘
 
-### Phase 11
+AI-generated output should never automatically become trusted executable behavior.
 
-Testing.
+19 // ROADMAP
+╔══════════════════════════════════════════════════════════════╗
+║                    SITEFORGE ROADMAP                        ║
+╚══════════════════════════════════════════════════════════════╝
+CURRENT
+████████████████████████████████████████  Business extraction
+████████████████████████████████████████  Business isolation
+████████████████████████████████████████  Brand intelligence
+████████████████████████████████████████  Website strategy
+████████████████████████████████████████  Landing page specs
+████████████████████████████████████████  Contract validation
+████████████████████████████████████████  Pipeline testing
+IN DEVELOPMENT
+████████████████████░░░░░░░░░░░░░░░░░░  AI JSON recovery
+██████████████████░░░░░░░░░░░░░░░░░░░░  Provider abstraction
+████████████████░░░░░░░░░░░░░░░░░░░░░░  Better observability
+██████████████░░░░░░░░░░░░░░░░░░░░░░░░  E2E hardening
+PLANNED
+░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  Background workers
+░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  Website versioning
+░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  Deployment automation
+░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  Custom domains
+░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  Analytics
+░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  Billing
+20 // WHY THIS ARCHITECTURE?
 
-### Phase 12
+A simple implementation could be:
 
-Deployment.
+BUSINESS URL
+     ↓
+     AI
+     ↓
+   HTML
 
-Do not start by building the pretty landing-page generator. The pretty part is the bait. The data pipeline is the product.
+It is easy.
+
+It is also fragile.
+
+SiteForge instead uses:
+
+                 RAW BUSINESS DATA
+                         │
+                         ▼
+                BUSINESS INTELLIGENCE
+                         │
+                         ▼
+                      BRAND DNA
+                         │
+                         ▼
+                 WEBSITE STRATEGY
+                         │
+                         ▼
+                LANDING PAGE SPEC
+                         │
+                         ▼
+                  WEBSITE ENGINE
+                         │
+                         ▼
+                     WEBSITE
+
+Every intermediate representation creates a new opportunity to:
+
+VALIDATE
+DEBUG
+TEST
+OBSERVE
+VERSION
+REGENERATE
+
+The complexity exists for a reason.
+
+21 // THE REAL ENGINEERING PROBLEM
+
+The interesting problem isn't:
+
+"How do I call an AI API?"
+
+That's the easy part.
+
+The real problem is:
+
+"How do I build deterministic software around
+a probabilistic component?"
+
+AI can:
+
+✓ Reason
+✓ Generate
+✓ Adapt
+✓ Summarize
+✓ Structure
+
+AI can also:
+
+✗ Omit fields
+✗ Change formats
+✗ Hallucinate
+✗ Produce malformed JSON
+✗ Timeout
+✗ Fail upstream
+✗ Behave inconsistently
+
+Therefore:
+
+                 PROBABILISTIC WORLD
+                         │
+                         ▼
+                     AI MODEL
+                         │
+                         ▼
+                  ┌──────────────┐
+                  │    PARSE     │
+                  └──────┬───────┘
+                         ▼
+                  ┌──────────────┐
+                  │   VALIDATE   │
+                  └──────┬───────┘
+                         ▼
+                  ┌──────────────┐
+                  │  NORMALIZE   │
+                  └──────┬───────┘
+                         ▼
+                  ┌──────────────┐
+                  │    CONTRACT  │
+                  └──────┬───────┘
+                         ▼
+                 DETERMINISTIC CORE
+
+That boundary is the heart of SiteForge.
+
+22 // OPEN SOURCE / PRODUCT DIRECTION
+
+SiteForge can evolve toward an open-core architecture.
+
+                         SITEFORGE
+                             │
+                 ┌───────────┴───────────┐
+                 │                       │
+                 ▼                       ▼
+          OPEN SOURCE CORE        MANAGED PLATFORM
+                 │                       │
+                 ├── Pipeline             ├── Hosting
+                 ├── Schemas              ├── Deployment
+                 ├── Validation           ├── Analytics
+                 ├── Generation           ├── Billing
+                 ├── Strategy             ├── Custom Domains
+                 └── AI orchestration     └── Managed Infra
+
+The open-source core can demonstrate the engineering system.
+
+A hosted platform can eventually provide the operational convenience.
+
+23 // BUILD PHILOSOPHY
+┌─────────────────────────────────────────────────────────┐
+│                                                         │
+│  DON'T HIDE COMPLEXITY.                                │
+│  CONTROL IT.                                            │
+│                                                         │
+│  DON'T TRUST AI BLINDLY.                               │
+│  VALIDATE IT.                                           │
+│                                                         │
+│  DON'T FEAR FAILURE.                                    │
+│  OBSERVE IT.                                            │
+│                                                         │
+│  DON'T COUPLE EVERYTHING.                               │
+│  DEFINE BOUNDARIES.                                     │
+│                                                         │
+│  DON'T JUST GENERATE.                                   │
+│  GENERATE → VALIDATE → TEST → DEPLOY.                  │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+<div align="center">
+⚡ SITEFORGE // END OF TRANSMISSION
+╔══════════════════════════════════════════════════════════╗
+║                                                          ║
+║        BUSINESS DATA  →  INTELLIGENCE  →  WEBSITE       ║
+║                                                          ║
+║                  BUILD. VALIDATE. FORGE.                 ║
+║                                                          ║
+╚══════════════════════════════════════════════════════════╝
+ENGINEERED AROUND AI. NOT DEPENDENT ON AI MAGIC.
+<br> <img src="https://img.shields.io/badge/BUILT-WITH%20ENGINEERING-00ffff?style=for-the-badge&labelColor=050505"> <img src="https://img.shields.io/badge/POWERED-BY%20AI-ff00ff?style=for-the-badge&labelColor=050505"> <img src="https://img.shields.io/badge/VALIDATED-BY%20TESTS-9dff00?style=for-the-badge&labelColor=050505"> </div> ```
