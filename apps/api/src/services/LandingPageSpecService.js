@@ -61,10 +61,10 @@ class LandingPageSpecService {
       const spec = await AIService.generate({
         prompt,
         model: 'reasoning',
-        schema: true,
+        schema: LANDING_PAGE_SPEC_SCHEMA,
         temperature: 0.5,
         maxTokens: 16000,
-        systemPrompt: `You are a senior UX designer, conversion strategist and frontend information architect. Generate a structured landing-page specification for a local business. Return ONLY valid JSON with pageTitle, pageDescription, primaryCTA, sections, theme, metadata. IMPORTANT: Return ONLY valid JSON. No markdown, no explanations.`,
+        systemPrompt: `You are a senior UX designer, conversion strategist and frontend information architect. Generate a structured landing-page specification for a local business. Return ONLY valid JSON with pageTitle, pageDescription, primaryCTA, sections, theme, metadata. IMPORTANT: Return ONLY valid JSON. No markdown, no explanations. The sections array MUST include navigation, hero, trustIndicators, cta, and footer sections.`,
       });
       const latency = Date.now() - startTime;
       this.validateSpec(spec);
