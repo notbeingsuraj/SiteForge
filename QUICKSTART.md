@@ -10,7 +10,6 @@ Complete stateless Business Intelligence Research application.
 ```bash
 cd apps/api
 # Edit .env:
-# - GOOGLE_MAPS_API_KEY=your-google-maps-api-key
 # - OMNIROUTE_API_KEY=your-omniroute-api-key
 ```
 
@@ -24,8 +23,10 @@ npm run dev
 ## 🎯 Core Feature
 
 **Business Intelligence Research Engine**
-- Extracts business data from Google Maps
-- Normalizes into structured JSON
+- Extracts business data from public web sources (official websites, structured data)
+- Accepts Google Maps URLs as input identifiers only (no API calls)
+- Supports user-provided business data
+- Normalizes into structured JSON with provenance & confidence
 - Never fabricates information
 - Returns null for unknowns
 
@@ -62,6 +63,7 @@ packages/          Shared code
 - Rate limiting
 - CORS, Helmet
 - Input validation
+- SSRF protection for web fetching
 
 ---
 
