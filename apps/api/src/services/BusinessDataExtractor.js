@@ -6,8 +6,9 @@ import AIService from './AIService.js';
 /**
  * Business Data Extractor
  * 
- * Retrieves business information from publicly accessible Google Maps URLs
- * without requiring a Google Maps API key.
+ * Retrieves business information from Google Maps URLs using:
+ * 1. Google Places API (New) - when GOOGLE_MAPS_API_KEY is configured (preferred)
+ * 2. r.jina.ai proxy fallback - when no API key is available
  */
 
 // In-memory cache (in production, use Redis or database)
@@ -36,6 +37,20 @@ class BusinessDataExtractor {
       maxRedirects: 3,
       validateStatus: (status) => status < 500,
     });
+
+    // Google Places API (New) client - only initialized if API key is available
+    if (config.googleMaps.apiKey) {
+      this.placesClient = axios.create({
+        baseURL: config.googleMaps.placesApiBaseUrl,
+        timeout: config.extraction.timeout,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': config.googleMaps.apiKey,
+          'X-Goog-FieldMask': config.googleMaps.fieldMask,
+        },
+        validateStatus: (status) => status < 500,
+      });
+    }
   }
 
   /**
@@ -91,6 +106,157 @@ class BusinessDataExtractor {
       timestamp: Date.now(),
       normalizedUrl: this.normalizeUrl(url),
     });
+  }
+
+  /**
+   * Fetch business data from Google Places API (New)
+   * @param {string} placeId - Google Place ID (ChIJ... or 0x...:0x... format)
+   * @returns {Object|null} Structured business data or null if not available
+   */
+  async fetchFromPlacesApi(placeId) {
+    if (!this.placesClient) {
+      if (config.debugBusinessAnalysis) {
+        console.log('[BusinessDataExtractor] Google Places API not configured, skipping');
+      }
+      return null;
+    }
+
+    if (!placeId || typeof placeId !== 'string') {
+      if (config.debugBusinessAnalysis) {
+        console.log('[BusinessDataExtractor] Invalid placeId for Places API:', placeId);
+      }
+      return null;
+    }
+
+    const isCidFormat = /^0x[0-9a-fA-F]+:0x[0-9a-fA-F]+$/.test(placeId);
+    const isStandardPlaceId = placeId.startsWith('ChIJ') && placeId.length >= 27;
+
+    if (!isStandardPlaceId && !isCidFormat) {
+      if (config.debugBusinessAnalysis) {
+        console.log('[BusinessDataExtractor] Unsupported placeId format for Places API:', placeId);
+      }
+      return null;
+    }
+
+    try {
+      if (config.debugBusinessAnalysis) {
+        console.log('[BusinessDataExtractor] Fetching from Google Places API (New):', placeId);
+      }
+
+      const resourceName = `places/${placeId}`;
+      const response = await this.placesClient.get(resourceName);
+
+      if (response.status === 200 && response.data) {
+        if (config.debugBusinessAnalysis) {
+          console.log('[BusinessDataExtractor] Places API success:', response.data.id);
+        }
+        return this.normalizePlacesApiResponse(response.data);
+      } else {
+        if (config.debugBusinessAnalysis) {
+          console.log('[BusinessDataExtractor] Places API returned non-200:', response.status);
+        }
+        return null;
+      }
+    } catch (error) {
+      if (config.debugBusinessAnalysis) {
+        console.log('[BusinessDataExtractor] Places API error:', error.message);
+        if (error.response) {
+          console.log('[BusinessDataExtractor] Places API error details:', error.response.status, error.response.data);
+        }
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Normalize Google Places API (New) response to internal format
+   * @param {Object} data - Raw Places API response
+   * @returns {Object} Normalized business data
+   */
+  normalizePlacesApiResponse(data) {
+    if (!data) return null;
+
+    const addressComponents = data.addressComponents || [];
+    const getAddressComponent = (type) => {
+      const component = addressComponents.find(c => c.types.includes(type));
+      return component?.longText || component?.shortText || null;
+    };
+
+    let hours = null;
+    if (data.regularOpeningHours?.periods) {
+      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      hours = {};
+      for (const period of data.regularOpeningHours.periods) {
+        const openDay = period.open?.day ?? 0;
+        const openTime = period.open?.hour !== undefined ? `${String(period.open.hour).padStart(2, '0')}:${String(period.open.minute || 0).padStart(2, '0')}` : null;
+        const closeTime = period.close?.hour !== undefined ? `${String(period.close.hour).padStart(2, '0')}:${String(period.close.minute || 0).padStart(2, '0')}` : null;
+        
+        const dayName = days[openDay];
+        if (dayName) {
+          if (openTime && closeTime) {
+            hours[dayName] = `${openTime}-${closeTime}`;
+          } else if (!openTime && !closeTime) {
+            hours[dayName] = 'closed';
+          }
+        }
+      }
+    }
+
+    const primaryType = data.primaryType || (data.types && data.types[0]);
+    const primaryTypeDisplayName = data.primaryTypeDisplayName?.text || null;
+
+    return {
+      business: {
+        name: data.displayName?.text || null,
+        category: primaryTypeDisplayName || primaryType || null,
+        categories: data.types || [],
+        description: data.editorialSummary?.text || null,
+        business_type: primaryType || null,
+      },
+      contact: {
+        phone: data.nationalPhoneNumber || data.internationalPhoneNumber || null,
+        email: null,
+        website: data.websiteUri || null,
+      },
+      location: {
+        full_address: data.formattedAddress || data.shortFormattedAddress || null,
+        street: getAddressComponent('street_number') ? `${getAddressComponent('street_number')} ${getAddressComponent('route') || ''}`.trim() : getAddressComponent('route') || null,
+        city: getAddressComponent('locality') || getAddressComponent('postal_town') || getAddressComponent('sublocality_level_1') || null,
+        state: getAddressComponent('administrative_area_level_1') || null,
+        country: getAddressComponent('country') || null,
+        postal_code: getAddressComponent('postal_code') || null,
+        latitude: data.location?.latitude || null,
+        longitude: data.location?.longitude || null,
+      },
+      ratings: {
+        rating: typeof data.rating === 'number' ? data.rating : null,
+        review_count: typeof data.userRatingCount === 'number' ? data.userRatingCount : null,
+      },
+      hours: hours,
+      reviews: [],
+      services: [],
+      products: [],
+      amenities: [],
+      social_links: [],
+      pricing: data.priceLevel !== undefined ? String(data.priceLevel) : null,
+      booking_url: null,
+      source_urls: [],
+      confidence: {
+        overall: 0.9,
+        name: 1.0,
+        category: 0.9,
+        phone: data.nationalPhoneNumber ? 0.9 : 0,
+        website: data.websiteUri ? 0.9 : 0,
+        address: data.formattedAddress ? 0.9 : 0,
+        rating: data.rating ? 0.9 : 0,
+      },
+      metadata: {
+        placesApi: true,
+        placeId: data.id,
+        types: data.types,
+        priceLevel: data.priceLevel,
+      },
+    };
   }
 
   /**
@@ -679,22 +845,77 @@ Rules:
     const placeId = this.extractPlaceId(googleMapsUrl);
     const placeName = this.extractPlaceName(googleMapsUrl);
 
-    // Fetch page content
-    const pageData = await this.fetchPage(googleMapsUrl);
+    let extractedProfile = null;
+    let metadata = {};
+    let pageData = { url: googleMapsUrl, status: 200, html: '' };
+    let acquisitionMethod = 'none';
+    let resolutionStatus = 'unresolved';
+
+    // Try Google Places API (New) first if placeId is available and API key configured
+    if (placeId && this.placesClient) {
+      if (config.debugBusinessAnalysis) {
+        console.log('[BusinessDataExtractor] Attempting Places API acquisition for:', placeId);
+      }
+      const placesData = await this.fetchFromPlacesApi(placeId);
+      if (placesData) {
+        extractedProfile = placesData;
+        acquisitionMethod = 'places_api';
+        resolutionStatus = 'resolved';
+        metadata = {
+          sourceUrl: googleMapsUrl,
+          originalUrl: googleMapsUrl,
+          placeId,
+          placeName,
+          extractedAt: new Date().toISOString(),
+          httpStatus: 200,
+          hasJsonLd: false,
+          hasMicrodata: false,
+          hasOpenGraph: false,
+          acquisitionMethod,
+          resolutionStatus,
+        };
+        
+        // Cache and return early with high-quality data
+        const result = {
+          ...extractedProfile,
+          metadata,
+          cached: false,
+        };
+        this.setCachedExtraction(googleMapsUrl, result);
+        return result;
+      }
+    }
+
+    // Fallback: Fetch page content via r.jina.ai proxy
+    if (config.debugBusinessAnalysis) {
+      console.log('[BusinessDataExtractor] Falling back to r.jina.ai proxy');
+    }
+    pageData = await this.fetchPage(googleMapsUrl);
     
     if (pageData.status >= 400) {
       throw new Error(`Failed to retrieve page: HTTP ${pageData.status}`);
     }
 
-    // Extract metadata
-    const metadata = this.extractMetadata(pageData.html);
+    // Extract metadata from HTML
+    metadata = this.extractMetadata(pageData.html);
     metadata.sourceUrl = pageData.url;
 
-    // Use AI to extract structured profile
-    const extractedProfile = await this.extractWithAI(metadata, pageData.url);
+    // Use AI to extract structured profile from page content
+    extractedProfile = await this.extractWithAI(metadata, pageData.url);
     
     // Validate and clean
     const validatedProfile = this.validateProfile(extractedProfile);
+    
+    // Determine resolution status based on what we got
+    if (placeId && this.isValidPlaceIdFormat(placeId)) {
+      resolutionStatus = validatedProfile.business?.name ? 'resolved' : 'partial';
+    } else if (placeName) {
+      resolutionStatus = 'ambiguous';
+    } else {
+      resolutionStatus = 'unresolved';
+    }
+
+    acquisitionMethod = 'r_jina_ai';
     
     // Add metadata
     const result = {
@@ -709,6 +930,8 @@ Rules:
         hasJsonLd: metadata.jsonLd.length > 0,
         hasMicrodata: Object.keys(metadata.microdata).length > 0,
         hasOpenGraph: Object.keys(metadata.openGraph).length > 0,
+        acquisitionMethod,
+        resolutionStatus,
       },
       cached: false,
     };
