@@ -24,11 +24,6 @@ export const config = {
       copywriting: process.env.OMNIROUTE_COPYWRITING_MODEL || 'hy3-free',
     },
   },
-  googleMaps: {
-    apiKey: process.env.GOOGLE_MAPS_API_KEY || null,
-    placesApiBaseUrl: 'https://places.googleapis.com/v1',
-    fieldMask: 'id,displayName,formattedAddress,location,rating,userRatingCount,types,primaryType,primaryTypeDisplayName,nationalPhoneNumber,internationalPhoneNumber,websiteUri,regularOpeningHours,photos,priceLevel,editorialSummary,addressComponents,shortFormattedAddress',
-  },
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 900000,
     maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
