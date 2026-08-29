@@ -52,9 +52,23 @@ class AIService {
         stream: false,
       };
 
-      // If schema is provided, request structured JSON output
+      // If schema is provided, request structured JSON output with schema enforcement
       if (schema) {
-        payload.response_format = { type: 'json_object' };
+        // Check if it's a full JSON schema object or just true
+        if (typeof schema === 'object' && schema !== null && schema.type === 'object') {
+          // Full JSON schema provided - use strict structured output
+          payload.response_format = {
+            type: 'json_schema',
+            json_schema: {
+              name: 'LandingPageSpec',
+              strict: true,
+              schema: schema
+            }
+          };
+        } else {
+          // Just requesting JSON object without strict schema
+          payload.response_format = { type: 'json_object' };
+        }
       }
 
       const selectedModel = payload.model;
