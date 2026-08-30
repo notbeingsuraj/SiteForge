@@ -539,4 +539,92 @@ Rules:
 
     return validated;
   }
-}
+
+  /**
+   * MAIN ENTRY POINT: Extract from Google Maps URL
+   * 
+   * Pipeline:
+   * 1. Parse URL for identifiers (IDENTIFIED provenance)
+   * 2. If website found in extracted data, fetch official website (DISCOVERED provenance)
+   * 3. Merge into BusinessProfile with provenance tracking
+   * 4. Return normalized result
+   */
+  async extractFromGoogleMapsUrl(googleMapsUrl) {
+    // Check cache first
+    const cached = this.getCachedExtraction(googleMapsUrl);
+    if (cached) {
+      return { ...cached, cached: true };
+    }
+
+    // Step 1: Parse URL for identifiers (IDENTIFIED provenance)
+    const parsed = this.parser.parse(googleMapsUrl);
+    const identified = parsed.identified;
+    const provenance = parsed.provenance;
+
+    if (config.debugBusinessAnalysis) {
+      console.log('[BusinessDataExtractor] Parsed identifiers:', identified);
+    }
+
+    // Step 2: Fetch Google Maps page content via proxy
+    let pageData;
+    let metadata;
+    let extractedProfile;
+    let resolutionStatus = 'unresolved';
+    let acquisitionMethod = 'r_jina_ai';
+
+    try {
+      pageData = await this.fetchPage(googleMapsUrl);
+      
+      if (pageData.status >= 400) {
+        throw new Error(`Failed to retrieve page: HTTP ${pageData.status}`);
+      }
+
+      // Extract metadata from HTML
+      metadata = this.extractMetadata(pageData.html);
+      metadata.sourceUrl = pageData.url;
+
+      // Use AI to extract structured profile from page content
+      extractedProfile = await this.extractWithAI(metadata, pageData.url);
+      
+      // Validate and clean
+      extractedProfile = this.validateProfile(extractedProfile);
+      
+      // Determine resolution status
+      if (identified.placeId && this.parser.isValidPlaceIdFormat(identified.placeId)) {
+        resolutionStatus = extractedProfile.business?.name ? 'resolved' : 'partial';
+      } else if (identified.placeName) {
+        resolutionStatus = 'ambiguous';
+      }
+    } catch (error) {
+      console.error('[BusinessDataExtractor] Extraction failed:', error.message);
+      // Return minimal profile with just identified info
+      extractedProfile = {
+        business: { name: identified.placeName, category: null, categories: [], description: null, business_type: null },
+        contact: { phone: null, email: null, website: null },
+        location: { full_address: null, street: null, city: null, state: null, country: null, postal_code: null, latitude: identified.coordinates?.lat ?? null, longitude: identified.coordinates?.lng ?? null },
+        ratings: { rating: null, review_count: null },
+        hours: {},
+        reviews: [],
+        services: [],
+        products: [],
+        amenities: [],
+        social_links: [],
+        pricing: null,
+        booking_url: null,
+        source_urls: [googleMapsUrl],
+        confidence: { overall: 0, name: identified.placeName ? 0.5 : 0, category: 0, phone: 0, website: 0, address: 0, rating: 0 },
+      };
+      resolutionStatus = identified.placeId ? 'partial' : 'unresolved';
+    }
+
+    // Step 3: Build BusinessProfile with provenance tracking
+    const profile = new BusinessProfile();
+    
+    // Add IDENTIFIED data from URL parsing
+    if (identified.placeName) {
+      profile.set('identity.name', identified.placeName, 'identified', 0.6, { sourceUrl: googleMapsUrl });
+    }
+    if (identified.coordinates) {
+      profile.set('location.coordinates', identified.coordinates, 'identified', 0.8, { sourceUrl: googleMapsUrl });
+    }
+}}
