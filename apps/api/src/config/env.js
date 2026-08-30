@@ -19,7 +19,7 @@ export const config = {
     baseUrl: process.env.OMNIROUTE_BASE_URL || 'http://localhost:20128/v1',
     models: {
       fast: process.env.OMNIROUTE_FAST_MODEL || 'auto/best-fast',
-      reasoning: process.env.OMNIROUTE_REASONING_MODEL || 'auto/best-reasoning',
+      reasoning: process.env.OMNIROUTE_REASONING_MODEL || 'auto/best-coding',
       coding: process.env.OMNIROUTE_CODING_MODEL || 'auto/best-coding',
       copywriting: process.env.OMNIROUTE_COPYWRITING_MODEL || 'auto/best-fast',
     },
