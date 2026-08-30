@@ -704,6 +704,12 @@ Rules:
     }
 
     // Step 5: Build final result
+    const providerFailure = Boolean(
+      extractedProfile?.providerError ||
+      extractedProfile?.providerUnavailable ||
+      (Array.isArray(extractedProfile?.source_urls) && extractedProfile.source_urls.includes(googleMapsUrl) && extractedProfile?.confidence?.overall === 0)
+    );
+
     const result = {
       ...profile.toObject(),
       metadata: {
@@ -727,8 +733,9 @@ Rules:
       cached: false,
     };
 
-    // Cache the result
-    this.setCachedExtraction(googleMapsUrl, result);
+    if (!providerFailure) {
+      this.setCachedExtraction(googleMapsUrl, result);
+    }
 
     return result;
   }
