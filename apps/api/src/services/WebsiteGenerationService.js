@@ -113,10 +113,11 @@ class WebsiteGenerationService {
     const doStart = options.start !== false;
 
     if (doBuild) {
-      // Install only if requested (helps offline/dev iterations).
-      if (GeneratedSiteManager.runInstall) {
-        try { await GeneratedSiteManager.runInstall(slug); }
-        catch (e) { /* node_modules may already exist */ }
+      // Install only if requested (helps offline/dev iterations). ManagedSite
+      // tolerates install failures when node_modules is usable; a real install
+      // failure (no node_modules) surfaces here as a build-level error.
+      if (GeneratedSiteManager.shouldRunInstall) {
+        await GeneratedSiteManager.runInstall(slug);
       }
       // If node_modules present, build; otherwise throw a clear install error.
       await GeneratedSiteManager.runBuild(slug);

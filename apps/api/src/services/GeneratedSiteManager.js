@@ -37,7 +37,8 @@ class GeneratedSiteManager {
     this.host = config.websiteGeneration?.host || '127.0.0.1';
     this.basePort = config.websiteGeneration?.basePort || 4321;
     this.maxPort = config.websiteGeneration?.maxPort || 4330;
-    this.runInstall = config.websiteGeneration?.runInstall !== false;
+    // NOTE: property name must not collide with the runInstall() method below.
+    this.shouldRunInstall = config.websiteGeneration?.runInstall !== false;
     this.manifestPath = path.join(this.generatedDir, '.manifest.json');
   }
 
@@ -135,11 +136,19 @@ class GeneratedSiteManager {
   }
 
   /**
-   * Run npm install (unless disabled for offline usage). Ignores nonzero exit
-   * because node_modules might already be present/usable.
+   * Run npm install (unless disabled for offline usage). A failed install that
+   * leaves no node_modules throws so callers surface a clear build error;
+   * an install that still leaves a usable node_modules is tolerated.
    */
-  runInstall(slug) {
-    return this._run('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error'], this.siteDir(slug));
+  async runInstall(slug) {
+    const dir = this.siteDir(slug);
+    try {
+      await this._run('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error'], dir);
+      return 0;
+    } catch (e) {
+      if (fs.existsSync(path.join(dir, 'node_modules'))) return 0;
+      throw e;
+    }
   }
 
   /**
