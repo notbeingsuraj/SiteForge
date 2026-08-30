@@ -16,28 +16,28 @@ function fmt(v: unknown): string {
 }
 ---
 
-{#if hoursMap || hours}
-<section id="hours" class="section" style="scroll-margin-top:4rem">
-  <div class="container">
-    <h2 class="section__title">Hours</h2>
-    <div class="hours">
-      {hoursMap ? (
-        dayNames.map((d) => {
-          const val = hoursMap[d.toLowerCase()] ?? hoursMap[d] ?? null;
-          return val ? (
-            <div class="hours__row" key={d}>
-              <span class="hours__day">{d.charAt(0).toUpperCase() + d.slice(1)}</span>
-              <span class="hours__time">{fmt(val)}</span>
-            </div>
-          ) : null;
-        })
-      ) : (
-        <div class="hours__row">
-          <span class="hours__day">Hours</span>
-          <span class="hours__time">{hours}</span>
-        </div>
-      )}
+{(hoursMap || hours) && (
+  <section id="hours" class="section" style="scroll-margin-top:4rem">
+    <div class="container">
+      <h2 class="section__title">Hours</h2>
+      <div class="hours">
+        {hoursMap ? (
+          dayNames.map((d) => {
+            const val = hoursMap[d.toLowerCase()] ?? hoursMap[d] ?? null;
+            return val ? (
+              <div class="hours__row" key={d}>
+                <span class="hours__day">{d.charAt(0).toUpperCase() + d.slice(1)}</span>
+                <span class="hours__time">{fmt(val)}</span>
+              </div>
+            ) : null;
+          })
+        ) : (
+          <div class="hours__row">
+            <span class="hours__day">Hours</span>
+            <span class="hours__time">{hours}</span>
+          </div>
+        )}
+      </div>
     </div>
-  </div>
-</section>
-{/if}
+  </section>
+)}
