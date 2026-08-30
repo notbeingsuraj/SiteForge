@@ -176,8 +176,9 @@ class GeneratedSiteManager {
   }
 
   /**
-   * Start a minimal localhost static server serving the built dist/ output.
-   * Returns { port, url }. Tracks PID + port in the manifest.
+   * Start a localhost static server for the built dist/ output as a detached
+   * child process (survives API restarts; PID tracked in the manifest).
+   * Returns { port, url, pid }. Bind is 127.0.0.1 only — never exposed.
    */
   async start(slug, port) {
     const dist = path.join(this.siteDir(slug), 'dist');
@@ -186,58 +187,115 @@ class GeneratedSiteManager {
     }
     await this._stopIfRunning(slug);
 
-    const mime = {
-      '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
-      '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml',
-      '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-      '.gif': 'image/gif', '.webp': 'image/webp', '.ico': 'image/x-icon',
-      '.woff': 'font/woff', '.woff2': 'font/woff2', '.txt': 'text/plain',
-    };
+    // Child server script — a minimal keep-alive static file server.
+    const serverScript = `
+      const http = require('node:http');
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const dist = process.env.SF_DIST;
+      const host = process.env.SF_HOST || '127.0.0.1';
+      const port = Number(process.env.SF_PORT);
+      const mime = {
+        '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
+        '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml',
+        '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif', '.webp': 'image/webp', '.ico': 'image/x-icon',
+        '.woff': 'font/woff', '.woff2': 'font/woff2', '.txt': 'text/plain',
+      };
+      const server = http.createServer((req, res) => {
+        let urlPath;
+        try { urlPath = decodeURIComponent(new URL(req.url, 'http://' + host + ':' + port).pathname); }
+        catch { urlPath = '/'; }
+        if (urlPath.endsWith('/')) urlPath += 'index.html';
+        let filePath = path.normalize(path.join(dist, urlPath));
+        if (!filePath.startsWith(dist)) { res.writeHead(403).end('Forbidden'); return; }
+        if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+          filePath = path.join(dist, '404.html');
+          if (!fs.existsSync(filePath)) { res.writeHead(404).end('Not Found'); return; }
+        }
+        fs.readFile(filePath, (err, data) => {
+          if (err) { res.writeHead(404).end('Not Found'); return; }
+          const ext = path.extname(filePath).toLowerCase();
+          res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream' });
+          res.end(data);
+        });
+      });
+      server.listen(port, host, () => {
+        // Signal readiness on fd 3 (used by the parent spawn with pipe).
+        process.stdout.write('SITEFORGE_SERVER_READY ' + port + '\\n');
+      });
+      server.on('error', (e) => { console.error('SITEFORGE_SERVER_ERROR ' + (e && e.message)); process.exit(1); });
+      process.on('SIGTERM', () => server.close(() => process.exit(0)));
+      process.on('SIGINT', () => server.close(() => process.exit(0)));
+    `;
 
-    const server = http.createServer((req, res) => {
-      let urlPath;
-      try { urlPath = decodeURIComponent(new URL(req.url, `http://${this.host}:${port}`).pathname); }
-      catch { urlPath = '/'; }
-      if (urlPath.endsWith('/')) urlPath += 'index.html';
-      let filePath = path.normalize(path.join(dist, urlPath));
-      if (!filePath.startsWith(dist)) { res.writeHead(403).end('Forbidden'); return; }
-      if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-        filePath = path.join(dist, '404.html');
-      }
-      fs.readFile(filePath, (err, data) => {
-        if (err) { res.writeHead(404).end('Not Found'); return; }
-        const ext = path.extname(filePath).toLowerCase();
-        res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream' });
-        res.end(data);
+    const child = spawn(process.execPath, ['-e', serverScript], {
+      cwd: this.siteDir(slug),
+      env: {
+        ...process.env,
+        SF_DIST: dist,
+        SF_HOST: this.host,
+        SF_PORT: String(port),
+      },
+      detached: true,   // survives API process restarts/shutdown
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    child.unref();
+
+    // Wait for readiness (or error) — cap at ~5s.
+    await new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => { if (!settled) { settled = true; reject(new Error(`Server child for "${slug}" did not become ready on port ${port}`)); } }, 5000);
+      child.stdout.on('data', (d) => {
+        const line = String(d);
+        if (line.includes('SITEFORGE_SERVER_READY') && !settled) {
+          settled = true; clearTimeout(timer); resolve();
+        }
+      });
+      child.stderr.on('data', (d) => {
+        const line = String(d);
+        if (line.includes('SITEFORGE_SERVER_ERROR') && !settled) {
+          settled = true; clearTimeout(timer); reject(new Error(line.slice('SITEFORGE_SERVER_ERROR'.length).trim()));
+        }
+      });
+      child.on('exit', (code) => {
+        if (!settled) { settled = true; clearTimeout(timer); reject(new Error(`Server child for "${slug}" exited early with code ${code}`)); }
       });
     });
 
-    await new Promise((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(port, this.host, resolve);
-    });
-
     const manifest = await this.readManifest();
-    manifest[slug] = { ...(manifest[slug] || {}), port, url: `http://localhost:${port}`, status: 'running', startedAt: new Date().toISOString() };
+    manifest[slug] = {
+      ...(manifest[slug] || {}),
+      port,
+      url: `http://localhost:${port}`,
+      status: 'running',
+      pid: child.pid ?? null,
+      startedAt: new Date().toISOString(),
+    };
     await this.writeManifest(manifest);
 
-    // Keep a handle for later stop. Unref so it doesn't hold the API process.
-    server.unref?.();
-    this._servers = this._servers || new Map();
-    this._servers.set(slug, server);
-
-    return { port, url: `http://localhost:${port}`, status: 'running' };
+    return { port, url: `http://localhost:${port}`, status: 'running', pid: child.pid };
   }
 
   async _stopIfRunning(slug) {
+    // Terminate the tracked child process (detached server) if present.
+    const manifest = await this.readManifest();
+    const entry = manifest[slug];
+    if (entry?.pid) {
+      try { process.kill(entry.pid, 'SIGTERM'); } catch { /* already gone */ }
+      // Give the child a moment to close; then SIGKILL if it lingers.
+      await new Promise((r) => setTimeout(r, 150));
+      try { process.kill(entry.pid, 0); process.kill(entry.pid, 'SIGKILL'); } catch { /* gone */ }
+    }
+    // Drop any in-process handle (legacy servers from older versions).
     if (this._servers?.has(slug)) {
       const s = this._servers.get(slug);
-      await new Promise((r) => s.close(r));
+      await new Promise((r) => s.close?.(r) ?? r());
       this._servers.delete(slug);
     }
-    const manifest = await this.readManifest();
     if (manifest[slug]?.status === 'running') {
       manifest[slug].status = 'stopped';
+      manifest[slug].pid = null;
       await this.writeManifest(manifest);
     }
   }

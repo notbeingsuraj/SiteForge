@@ -3,6 +3,8 @@
     "port": 4321,
     "url": "http://localhost:4321",
     "status": "running",
-    "startedAt": "2026-08-30T17:26:27.385Z"
+    "startedAt": "2026-08-30T17:28:33.107Z",
+    "pid": 27542,
+    "stoppedAt": "2026-08-30T17:28:31.825Z"
   }
 }

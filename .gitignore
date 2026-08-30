@@ -33,6 +33,9 @@ Thumbs.db
 # Testing
 coverage/
 
+# Generated websites (local-only artifacts — never commit)
+generated-sites/
+
 # Misc
 *.pem
 .cache/
