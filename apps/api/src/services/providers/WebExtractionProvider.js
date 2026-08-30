@@ -33,7 +33,7 @@ class WebExtractionProvider extends BusinessDataProvider {
   async _getExtractor() {
     if (!this._extractorPromise) {
       // Dynamic import breaks the static import cycle
-      this._extractorPromise = import('./BusinessDataExtractor.js').then((m) => m.default || m);
+      this._extractorPromise = import('../BusinessDataExtractor.js').then((m) => m.default || m);
     }
     return this._extractorPromise;
   }

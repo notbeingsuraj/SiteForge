@@ -11,6 +11,7 @@ import GeoapifyProvider from './providers/GeoapifyProvider.js';
 import WebExtractionProvider from './providers/WebExtractionProvider.js';
 import { extractDeterministicHints } from './providers/ProviderAdapter.js';
 import { validateBusinessProfile, sanitizeFieldValue } from './BusinessProfileValidator.js';
+import { config } from '../config/env.js';
 
 class BusinessResearchService {
   /**
@@ -366,6 +367,376 @@ class BusinessResearchService {
     if (!data.website) unknowns.push('website');
     if (!data.phone && !data.formatted_phone_number) unknowns.push('phone');
     if (!data.email) unknowns.push('email');
+    return unknowns;
+  }
+
+  // =========================================================================
+  // PROVIDER ORCHESTRATION (Geoapify-first, with web-extraction fallback)
+  // =========================================================================
+
+  /**
+   * Build a full canonical BusinessProfile from the provider orchestration.
+   *
+   * Pipeline order (data priority):
+   *   1. Deterministic data from input (name, coords)
+   *   2. Geoapify structured place information (if available)
+   *   3. Existing web-extraction fallback (for missing fields)
+   *   4. AI enrichment (fill gaps only, never overwrite high-confidence)
+   *   5. Schema validation
+   *
+   * @param {Object} input - { googleMapsUrl?, name?, city?, state?, country?, latitude?, longitude? }
+   * @returns {Promise<Object>} { success, profile (BusinessProfile), intelligence, provider, validation }
+   */
+  async extractBusinessIntelligenceWithProviders(input = {}) {
+    const hints = await this._buildHints(input);
+    const profile = new BusinessProfile();
+    const providerTrace = { geoapify: null, webExtraction: null, aiEnrichment: false };
+    const sourceUrl = input.googleMapsUrl || input.sourceUrl || null;
+
+    // --- LEVEL 1: deterministic data from input (IDENTIFIED provenance) ---
+    if (hints.name) {
+      profile.set('identity.name', hints.name, 'identified', 0.6, { sourceUrl });
+    }
+    if (hints.latitude != null && hints.longitude != null) {
+      profile.set('location.coordinates', { lat: hints.latitude, lng: hints.longitude }, 'identified', 0.8, { sourceUrl });
+    }
+
+    // --- LEVEL 2: Geoapify structured data (provider provenance) ---
+    let geoapifyRecord = null;
+    if (GeoapifyProvider.isAvailable()) {
+      const business = await GeoapifyProvider.getBusiness(hints);
+      if (business) {
+        geoapifyRecord = business;
+        this._mergeCanonical(profile, business, 'discovered', 'geoapify', sourceUrl);
+      } else {
+        // Log the not-configured / no-result case softly (never secrets)
+        const status = (await GeoapifyProvider.search(hints)).status;
+        providerTrace.geoapify = status;
+      }
+    } else {
+      console.error('Geoapify provider unavailable; using fallback extraction.');
+      providerTrace.geoapify = 'not_configured';
+    }
+    if (geoapifyRecord) providerTrace.geoapify = 'ok';
+
+    // --- LEVEL 3: web-extraction fallback / completion of gaps ---
+    if (sourceUrl) {
+      const webResult = await WebExtractionProvider.search({ googleMapsUrl: sourceUrl });
+      if (webResult.status === 'ok' && webResult.records.length > 0) {
+        const webRecord = webResult.records[0];
+        providerTrace.webExtraction = 'ok';
+        // Merge web-derived data but never overwrite higher-confidence Geoapify data.
+        this._mergeCanonical(profile, webRecord, 'discovered', 'web_extraction', sourceUrl, /* onlyIfMissing= */ !!geoapifyRecord);
+      } else {
+        providerTrace.webExtraction = webResult.status;
+      }
+    }
+
+    // --- LEVEL 4: AI enrichment of gaps (does not overwrite high-confidence data) ---
+    if (this._hasGaps(profile)) {
+      await this._enrichMissingWithAI(profile, sourceUrl);
+      providerTrace.aiEnrichment = true;
+    }
+
+    // --- LEVEL 5: validation ---
+    const validation = validateBusinessProfile(profile.toObject());
+    if (validation.issues.length > 0 && config?.debugBusinessAnalysis) {
+      console.error('[BusinessResearchService] Profile validation issues:', validation.issues.map((i) => i.field).join(', '));
+    }
+
+    const intelligence = this._profileToIntelligence(profile, hints, providerTrace);
+
+    return {
+      success: true,
+      profile,
+      intelligence,
+      provider: providerTrace,
+      validation,
+      hints,
+    };
+  }
+
+  /**
+   * Convert deterministic input hints from URL / name / coords.
+   */
+  async _buildHints(input = {}) {
+    const hints = extractDeterministicHints(input);
+
+    // Pull from a Google Maps URL via GoogleMapsUrlParser if available.
+    if (!hints.name && input.googleMapsUrl) {
+      try {
+        const { default: parser } = await import('./GoogleMapsUrlParserProvider.js');
+        const parsed = parser.parse(input.googleMapsUrl);
+        const identified = parsed.identified || {};
+        if (identified.placeName && !hints.name) hints.name = identified.placeName;
+        if (identified.coordinates) {
+          if (hints.latitude == null) hints.latitude = identified.coordinates.lat;
+          if (hints.longitude == null) hints.longitude = identified.coordinates.lng;
+        }
+      } catch {
+        // ignore parse failure; rely on other hints
+      }
+    }
+    hints.sourceUrl = input.googleMapsUrl || input.sourceUrl || null;
+    return hints;
+  }
+
+  /**
+   * Merge a canonical provider record into the BusinessProfile.
+   * @param {BusinessProfile} profile
+   * @param {Object} record - canonical flat shape
+   * @param {string} provenance
+   * @param {string} providerLabel - 'geoapify' | 'web_extraction'
+   * @param {string|null} sourceUrl
+   * @param {boolean} onlyIfMissing - if true, do not overwrite existing values
+   */
+  _mergeCanonical(profile, record, provenance, providerLabel, sourceUrl, onlyIfMissing = false) {
+    if (!record || typeof record !== 'object') return;
+
+    const sourceInfo = { sourceUrl: sourceUrl || undefined };
+    const confidence = record.confidence || {};
+
+    const setOrSkip = (fieldPath, value, conf) => {
+      if (value == null || value === '') return;
+      if (onlyIfMissing && profile.get(fieldPath) != null) return;
+      profile.set(fieldPath, value, provenance, conf, sourceInfo);
+    };
+
+    if (record.business) {
+      setOrSkip('identity.name', sanitizeFieldValue(record.business.name), confidence.name || 0.9);
+      setOrSkip('identity.category', sanitizeFieldValue(record.business.category), confidence.category || 0.8);
+      if (Array.isArray(record.business.categories) && record.business.categories.length) {
+        if (!onlyIfMissing || !profile.get('identity.categories') || profile.get('identity.categories').length === 0) {
+          profile.set('identity.categories', record.business.categories, provenance, 0.8, sourceInfo);
+        }
+      }
+      setOrSkip('identity.description', sanitizeFieldValue(record.business.description), 0.7);
+      setOrSkip('identity.business_type', sanitizeFieldValue(record.business.business_type), 0.8);
+    }
+
+    if (record.contact) {
+      setOrSkip('contact.phone', sanitizeFieldValue(record.contact.phone), confidence.phone || 0.9);
+      setOrSkip('contact.email', sanitizeFieldValue(record.contact.email), 0.8);
+      setOrSkip('contact.website', sanitizeFieldValue(record.contact.website), confidence.website || 0.85);
+    }
+
+    if (record.location) {
+      setOrSkip('location.full_address', sanitizeFieldValue(record.location.full_address), confidence.address || 0.9);
+      setOrSkip('location.street', sanitizeFieldValue(record.location.street), 0.85);
+      setOrSkip('location.city', sanitizeFieldValue(record.location.city), 0.85);
+      setOrSkip('location.state', sanitizeFieldValue(record.location.state), 0.8);
+      setOrSkip('location.country', sanitizeFieldValue(record.location.country), 0.85);
+      setOrSkip('location.postal_code', sanitizeFieldValue(record.location.postal_code), 0.85);
+      const coords = record.location.coordinates || (record.location.latitude != null && record.location.longitude != null ? { lat: record.location.latitude, lng: record.location.longitude } : null);
+      if (coords) setOrSkip('location.coordinates', coords, 0.95);
+    }
+
+    if (record.ratings) {
+      if (typeof record.ratings.rating === 'number') setOrSkip('ratings.rating', record.ratings.rating, confidence.rating || 0.85);
+      if (typeof record.ratings.review_count === 'number') setOrSkip('ratings.review_count', record.ratings.review_count, 0.85);
+    }
+
+    if (record.hours && Object.keys(record.hours).some((k) => record.hours[k])) {
+      // Merge day-by-day; prefer existing over new when onlyIfMissing
+      if (!onlyIfMissing) {
+        profile.set('hours', record.hours, provenance, 0.8, sourceInfo);
+      } else {
+        const existingHours = profile.get('hours') || {};
+        const merged = { ...existingHours };
+        for (const [day, val] of Object.entries(record.hours)) {
+          if (val && !merged[day]) merged[day] = val;
+        }
+        profile.set('hours', merged, provenance, 0.8, sourceInfo);
+      }
+    }
+
+    if (Array.isArray(record.services) && record.services.length) {
+      if (!onlyIfMissing || profile.get('identity.services') == null) {
+        profile.set('identity.services', record.services, provenance, 0.7, sourceInfo);
+      }
+    }
+  }
+
+  /**
+   * AI enrichment of missing/incomplete fields. Only fills gaps; never
+   * overwrites high-confidence structured data already in the profile.
+   */
+  async _enrichMissingWithAI(profile, sourceUrl) {
+    try {
+      const { default: AIService } = await import('./AIService.js');
+
+      // Known structured information (do NOT ask AI to re-derive these)
+      const known = {
+        name: profile.get('identity.name'),
+        phone: profile.get('contact.phone'),
+        website: profile.get('contact.website'),
+        address: profile.get('location.full_address'),
+        coordinates: profile.get('location.coordinates'),
+        rating: profile.get('ratings.rating'),
+        review_count: profile.get('ratings.review_count'),
+        category: profile.get('identity.category'),
+      };
+
+      // Unresolved fields AI may attempt to fill / normalize
+      const unresolved = {
+        description: profile.get('identity.description'),
+        services: (profile.get('identity.services') || []).slice(0, 20),
+        category: known.category,
+      };
+
+      // If nothing meaningful is unresolved, skip AI to save calls
+      const hasSomethingToEnrich =
+        !known.category ||
+        !known.description ||
+        (unresolved.services && unresolved.services.length === 0);
+
+      if (!hasSomethingToEnrich) return;
+
+      const prompt = [
+        'You are a business-data enrichment assistant. You are given KNOWN verified structured facts for a business and a list of UNRESOLVED fields.',
+        '',
+        'KNOWN STRUCTURED DATA (do not contradict or overwrite these):',
+        JSON.stringify(known, null, 2),
+        '',
+        'UNRESOLVED FIELDS TO FILL (return existing values if already set):',
+        JSON.stringify(unresolved, null, 2),
+        '',
+        'Rules:',
+        '- Only fill fields that are currently null/empty; never change provided KNOWN values.',
+        '- category must be a short concrete business type/category label.',
+        '- description must be 1-3 concise sentences about the business (not a hallucination of facts).',
+        '- services must be an array of concrete service strings derived from the business category/known facts. Leave empty if you cannot infer any.',
+        '- Return ONLY valid JSON matching the schema. No markdown, no extra text.',
+      ].join('\n');
+
+      const schema = {
+        type: 'object',
+        properties: {
+          category: { type: ['string', 'null'] },
+          description: { type: ['string', 'null'] },
+          services: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['category', 'description', 'services'],
+      };
+
+      const result = await AIService.generate({
+        prompt,
+        model: 'reasoning',
+        schema,
+        temperature: 0.3,
+        maxTokens: 1500,
+        systemPrompt: 'You enrich only the missing business fields using the provided known data. Never invent factual fields like phone/address/website that were not verified.',
+      });
+
+      if (result && typeof result === 'object') {
+        if (result.category && profile.get('identity.category') == null) {
+          profile.set('identity.category', sanitizeFieldValue(result.category), 'inferred', 0.6, { sourceUrl });
+        }
+        if (result.description && profile.get('identity.description') == null) {
+          profile.set('identity.description', sanitizeFieldValue(result.description), 'inferred', 0.6, { sourceUrl });
+        }
+        if (Array.isArray(result.services) && result.services.length && profile.get('identity.services') == null) {
+          profile.set('identity.services', result.services.map(sanitizeFieldValue), 'inferred', 0.6, { sourceUrl });
+        }
+      }
+    } catch (error) {
+      // AI enrichment is best-effort; never fail the whole pipeline on it.
+      console.error('[BusinessResearchService] AI enrichment failed (best-effort):', error?.safeMessage || error?.message);
+    }
+  }
+
+  _hasGaps(profile) {
+    const fields = [
+      'identity.name',
+      'identity.category',
+      'identity.description',
+      'contact.phone',
+      'contact.website',
+      'location.full_address',
+    ];
+    return fields.some((f) => profile.get(f) == null);
+  }
+
+  /**
+   * Convert a canonical BusinessProfile into the SiteForge "intelligence" shape
+   * (same shape produced by extractBusinessIntelligence) so downstream
+   * consumers (BrandStrategyService, WebsiteStrategy, etc.) are unchanged.
+   */
+  _profileToIntelligence(profile, hints, providerTrace) {
+    const name = profile.get('identity.name');
+    const category = profile.get('identity.category');
+    const phone = profile.get('contact.phone');
+    const website = profile.get('contact.website');
+    const address = profile.get('location.full_address');
+    const coordinates = profile.get('location.coordinates');
+    const rating = profile.get('ratings.rating');
+    const reviewCount = profile.get('ratings.review_count');
+    const services = profile.get('identity.services') || [];
+
+    return {
+      source: {
+        query: hints.query || null,
+        placeId: null,
+        resolvedName: name,
+        resolutionStatus: name ? 'resolved' : 'unresolved',
+        resolutionConfidence: name ? 0.9 : 0,
+        mapsUrl: hints.sourceUrl || null,
+        providers: providerTrace,
+      },
+      identity: {
+        name,
+        category,
+        businessType: profile.get('identity.business_type'),
+        description: profile.get('identity.description'),
+        categories: profile.get('identity.categories') || [],
+      },
+      contact: {
+        phone,
+        email: profile.get('contact.email'),
+        website,
+      },
+      location: {
+        address,
+        city: profile.get('location.city'),
+        state: profile.get('location.state'),
+        country: profile.get('location.country'),
+        postalCode: profile.get('location.postal_code'),
+        coordinates: coordinates || null,
+      },
+      digitalPresence: {
+        googleMapsUrl: hints.sourceUrl || null,
+        website,
+        socialProfiles: { facebook: null, instagram: null, twitter: null, linkedin: null },
+        hasWebsite: !!website,
+        photos: [],
+      },
+      services,
+      trustSignals: this.buildTrustSignals({ rating, review_count: reviewCount }, []),
+      positioning: {
+        priceLevel: null,
+        category,
+        location: address,
+      },
+      facts: [
+        ...(name ? [{ claim: `Business name is ${name}`, source: 'structured_provider', verified: true }] : []),
+        ...(rating != null ? [{ claim: `Has a rating of ${rating}/5`, source: 'structured_provider', verified: true }] : []),
+      ],
+      unknowns: this.identifyUnknownsIntelligence({ website, phone, email: null }),
+      rating,
+      reviewCount,
+      openingHours: profile.get('hours') || null,
+      reviews: [],
+      photos: [],
+      confidence: { overall: name ? 0.9 : 0 },
+      validationIssues: [],
+    };
+  }
+
+  identifyUnknownsIntelligence({ website, phone, email }) {
+    const unknowns = [];
+    if (!website) unknowns.push('website');
+    if (!phone) unknowns.push('phone');
+    if (!email) unknowns.push('email');
     return unknowns;
   }
 }

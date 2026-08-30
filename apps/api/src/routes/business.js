@@ -1,62 +1,82 @@
 import express from 'express';
 import BusinessResearchService from '../services/BusinessResearchService.js';
 import BusinessDataExtractor from '../services/BusinessDataExtractor.js';
+import { config } from '../config/env.js';
 
 const router = express.Router();
 
 /**
  * POST /api/business/analyze
- * Extract business intelligence from a Google Maps URL (no API key required)
- * Phase 15 API contract
+ * Extract business intelligence from a Google Maps URL.
+ * Thin route — delegates to BusinessResearchService, which orchestrates the
+ * provider chain (Geoapify → web-extraction fallback → AI enrichment).
+ * No Geoapify calls live in this route.
  * 
  * Body: { googleMapsUrl: string }
  * Returns: { success, business, businessDNA, metadata }
  */
 router.post('/analyze', async (req, res, next) => {
   try {
-    const { googleMapsUrl } = req.body;
+    const { googleMapsUrl, name, city, state, country, latitude, longitude } = req.body;
     
-    if (!googleMapsUrl) {
+    if (!googleMapsUrl && !name) {
       return res.status(400).json({ 
-        error: 'googleMapsUrl is required' 
+        error: 'googleMapsUrl or name is required' 
       });
     }
 
-    // Validate URL format using extractor's validator
-    const isValid = BusinessDataExtractor.validateGoogleMapsUrl(googleMapsUrl);
-    if (!isValid) {
+    // Validate URL format when provided (using the parser, not a network call)
+    if (googleMapsUrl && !BusinessDataExtractor.validateGoogleMapsUrl(googleMapsUrl)) {
       return res.status(400).json({ 
         error: 'Invalid Google Maps URL format',
         code: 'INVALID_URL'
       });
     }
 
-    const extractedData = await BusinessDataExtractor.extractFromGoogleMapsUrl(googleMapsUrl);
+    // Orchestrated provider extraction (Geoapify-first, web fallback, AI enrichment)
+    const result = await BusinessResearchService.extractBusinessIntelligenceWithProviders({
+      googleMapsUrl,
+      name,
+      city,
+      state,
+      country,
+      latitude,
+      longitude,
+    });
 
-    if (extractedData?.metadata?.providerUnavailable || extractedData?.providerUnavailable) {
-      const providerError = extractedData?.metadata?.providerError || extractedData?.providerError || {
+    const business = result.intelligence;
+
+    // Provider chain returned nothing usable → 503 provider_unavailable
+    const nothingUsable =
+      !business.identity?.name &&
+      result.provider?.geoapify &&
+      result.provider?.geoapify !== 'ok' &&
+      (!business.contact?.phone && !business.contact?.website && !business.location?.address);
+
+    if (nothingUsable) {
+      const providerError = {
         category: 'PROVIDER_UNAVAILABLE',
         httpStatus: null,
-        safeMessage: 'AI provider is unavailable. No business data was produced.',
+        safeMessage: 'Business provider temporarily unavailable. No business data was produced.',
       };
 
       return res.status(503).json({
         success: false,
         error: 'provider_unavailable',
-        message: providerError.safeMessage || 'AI provider is unavailable. No business data was produced.',
+        message: providerError.safeMessage,
         provider: {
-          gateway: extractedData?.metadata?.gateway || 'http://localhost:20128/v1',
-          model: extractedData?.metadata?.model || null,
+          gateway: config.omniroute.baseUrl,
+          model: config.omniroute.models.reasoning,
           category: providerError.category || 'PROVIDER_UNAVAILABLE',
           httpStatus: providerError.httpStatus || null,
-          retryCount: providerError.retryCount || 0,
-          retryAttempted: Boolean(providerError.retryAttempted),
+          retryCount: 0,
+          retryAttempted: false,
+          geoapifyStatus: result.provider?.geoapify || null,
+          webExtractionStatus: result.provider?.webExtraction || null,
         },
         data: null,
       });
     }
-
-    const business = await BusinessResearchService.extractBusinessIntelligence(extractedData);
 
     const { default: BrandStrategyService } = await import('../services/BrandStrategyService.js');
     const businessDNA = await BrandStrategyService.generateBrandDNA(business);
@@ -66,10 +86,12 @@ router.post('/analyze', async (req, res, next) => {
       business,
       businessDNA,
       metadata: {
-        source: 'google_maps_public_data',
-        confidence: extractedData.confidence?.overall || 0,
-        extractedAt: extractedData.metadata?.extractedAt || new Date().toISOString(),
-        cached: extractedData.cached || false,
+        source: 'geoapify_and_web_extraction',
+        providers: result.provider,
+        confidence: business.confidence?.overall || 0,
+        extractedAt: new Date().toISOString(),
+        cached: false,
+        validationIssues: result.validation?.issues?.length ? result.validation.issues.map((i) => i.field) : [],
       },
     });
   } catch (error) {
@@ -102,18 +124,25 @@ router.post('/research', async (req, res, next) => {
       });
     }
 
-    // Extract business data
-    const extractedData = await BusinessDataExtractor.extractFromGoogleMapsUrl(googleMapsUrl);
-    
-    // Research and structure the business intelligence
-    const intelligence = await BusinessResearchService.extractBusinessIntelligence(extractedData);
+    // Extract business data via the provider orchestration (Geoapify → web fallback → AI)
+    const result = await BusinessResearchService.extractBusinessIntelligenceWithProviders({
+      googleMapsUrl,
+      name: req.body.name,
+      city: req.body.city,
+      state: req.body.state,
+      country: req.body.country,
+      latitude: req.body.latitude,
+      longitude: req.body.longitude,
+    });
 
     res.json({
       success: true,
-      data: intelligence,
+      data: result.intelligence,
       metadata: {
         extractedAt: new Date().toISOString(),
         sourceUrl: googleMapsUrl,
+        providers: result.provider,
+        validationIssues: result.validation?.issues?.length ? result.validation.issues.map((i) => i.field) : [],
       },
     });
   } catch (error) {
