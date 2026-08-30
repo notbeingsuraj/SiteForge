@@ -123,4 +123,141 @@ class BusinessDataExtractor {
   extractPlaceName(url) {
     return this.parser.extractPlaceName(url);
   }
-}
+
+  /**
+   * Fetch page content with retries using r.jina.ai proxy
+   */
+  async fetchPage(url, retryCount = 0) {
+    // Validate URL to prevent SSRF
+    try {
+      const parsed = new URL(url);
+      
+      // Only allow HTTPS
+      if (parsed.protocol !== "https:") {
+        throw new Error("Only HTTPS URLs are allowed");
+      }
+      
+      // Block private/internal IPs
+      const hostname = parsed.hostname.toLowerCase();
+      const blockedHostnames = ["localhost", "localhost.localdomain", "local"];
+      if (blockedHostnames.includes(hostname)) {
+        throw new Error("Localhost URLs are not allowed");
+      }
+      
+      const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+      if (ipv4Regex.test(hostname)) {
+        const parts = hostname.split(".").map(Number);
+        if (
+          parts[0] === 10 ||
+          parts[0] === 127 ||
+          (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+          (parts[0] === 192 && parts[1] === 168) ||
+          (parts[0] === 169 && parts[1] === 254)
+        ) {
+          throw new Error("Private IP addresses are not allowed");
+        }
+      }
+      
+      if (hostname === "::1" || hostname.startsWith("fe80:")) {
+        throw new Error("IPv6 internal addresses are not allowed");
+      }
+    } catch (error) {
+      if (error.message.includes("not allowed") || error.message.includes("Only HTTPS")) {
+        throw error;
+      }
+      throw new Error("Invalid URL format");
+    }
+
+    // Use jina.ai proxy to extract content from JavaScript-rendered pages
+    const proxyUrl = `https://r.jina.ai/http://${url.replace(/^https?:\/\//, '')}`;
+
+    try {
+      const response = await this.proxyClient.get(proxyUrl);
+      return {
+        url,
+        html: response.data,
+        status: response.status,
+        headers: response.headers,
+      };
+    } catch (error) {
+      if (error.response) {
+        return {
+          url,
+          html: error.response.data || '',
+          status: error.response.status,
+          headers: error.response.headers,
+          error: error.message,
+        };
+      }
+
+      if (retryCount < config.extraction.maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+        return this.fetchPage(url, retryCount + 1);
+      }
+
+      throw new Error(`Failed to fetch page: ${error.message}`);
+    }
+  }
+
+  /**
+   * Extract structured metadata from page (from Google Maps page via proxy)
+   */
+  extractMetadata(html) {
+    return {
+      jsonLd: this.extractJsonLd(html),
+      microdata: this.extractMicrodata(html),
+      openGraph: this.extractOpenGraph(html),
+      visibleText: this.extractVisibleText(html),
+    };
+  }
+
+  extractJsonLd(html) {
+    const results = [];
+    const regex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    let match;
+    
+    while ((match = regex.exec(html)) !== null) {
+      try {
+        const json = JSON.parse(match[1]);
+        results.push(json);
+      } catch {
+        // Ignore invalid JSON-LD
+      }
+    }
+    return results;
+  }
+
+  extractMicrodata(html) {
+    const results = {};
+    const itemPropRegex = /itemprop=["']([^"']+)["'][^>]*>([^<]*)</gi;
+    let match;
+    while ((match = itemPropRegex.exec(html)) !== null) {
+      const prop = match[1];
+      const value = match[2].trim();
+      if (value && !results[prop]) {
+        results[prop] = value;
+      }
+    }
+    return results;
+  }
+
+  extractOpenGraph(html) {
+    const results = {};
+    const regex = /<meta[^>]*property=["']og:([^"']+)["'][^>]*content=["']([^"']*)["']/gi;
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      results[match[1]] = match[2];
+    }
+    return results;
+  }
+
+  extractVisibleText(html) {
+    let text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return text.substring(0, 15000);
+  }
