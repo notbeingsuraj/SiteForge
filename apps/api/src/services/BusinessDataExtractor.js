@@ -627,4 +627,131 @@ Rules:
     if (identified.coordinates) {
       profile.set('location.coordinates', identified.coordinates, 'identified', 0.8, { sourceUrl: googleMapsUrl });
     }
-}}
+
+    // Add DISCOVERED data from Google Maps page extraction
+    if (extractedProfile.business?.name) {
+      profile.set('identity.name', extractedProfile.business.name, 'discovered', extractedProfile.confidence?.name || 0.7, { sourceUrl: pageData?.url || googleMapsUrl });
+    }
+    if (extractedProfile.business?.category) {
+      profile.set('identity.category', extractedProfile.business.category, 'discovered', extractedProfile.confidence?.category || 0.6, { sourceUrl: pageData?.url || googleMapsUrl });
+    }
+    if (extractedProfile.business?.categories?.length) {
+      profile.set('identity.categories', extractedProfile.business.categories, 'discovered', 0.6, { sourceUrl: pageData?.url || googleMapsUrl });
+    }
+    if (extractedProfile.business?.description) {
+      profile.set('identity.description', extractedProfile.business.description, 'discovered', 0.6, { sourceUrl: pageData?.url || googleMapsUrl });
+    }
+    if (extractedProfile.contact?.phone) {
+      profile.set('contact.phone', extractedProfile.contact.phone, 'discovered', extractedProfile.confidence?.phone || 0.6, { sourceUrl: pageData?.url || googleMapsUrl });
+    }
+    if (extractedProfile.contact?.website) {
+      profile.set('contact.website', extractedProfile.contact.website, 'discovered', extractedProfile.confidence?.website || 0.6, { sourceUrl: pageData?.url || googleMapsUrl });
+    }
+    if (extractedProfile.location?.full_address) {
+      profile.set('location.full_address', extractedProfile.location.full_address, 'discovered', extractedProfile.confidence?.address || 0.6, { sourceUrl: pageData?.url || googleMapsUrl });
+    }
+    if (extractedProfile.location?.coordinates) {
+      profile.set('location.coordinates', extractedProfile.location.coordinates, 'discovered', 0.7, { sourceUrl: pageData?.url || googleMapsUrl });
+    }
+    if (extractedProfile.ratings?.rating) {
+      profile.set('ratings.rating', extractedProfile.ratings.rating, 'discovered', extractedProfile.confidence?.rating || 0.7, { sourceUrl: pageData?.url || googleMapsUrl });
+    }
+    if (extractedProfile.hours && Object.keys(extractedProfile.hours).some(k => extractedProfile.hours[k])) {
+      profile.set('hours', extractedProfile.hours, 'discovered', 0.6, { sourceUrl: pageData?.url || googleMapsUrl });
+    }
+    if (extractedProfile.social_links?.length) {
+      profile.set('social_links', extractedProfile.social_links, 'discovered', 0.5, { sourceUrl: pageData?.url || googleMapsUrl });
+    }
+
+    // Step 4: Try to fetch official website for VERIFIED/DISCOVERED data
+    const websiteUrl = extractedProfile.contact?.website || profile.get('contact.website');
+    if (websiteUrl) {
+      try {
+        if (config.debugBusinessAnalysis) {
+          console.log('[BusinessDataExtractor] Fetching official website:', websiteUrl);
+        }
+        const websiteData = await this.websiteProvider.extract(websiteUrl);
+        
+        // Merge with VERIFIED provenance (official website is authoritative)
+        profile.merge(websiteData, 'verified', 0.9);
+        
+        if (config.debugBusinessAnalysis) {
+          console.log('[BusinessDataExtractor] Official website data merged');
+        }
+      } catch (error) {
+        if (config.debugBusinessAnalysis) {
+          console.log('[BusinessDataExtractor] Official website fetch failed:', error.message);
+        }
+        // Don't fail - continue with what we have
+      }
+    }
+
+    // Step 5: Build final result
+    const result = {
+      ...profile.toObject(),
+      metadata: {
+        ...provenance,
+        placeId: identified.placeId,
+        placeName: identified.placeName,
+        extractedAt: new Date().toISOString(),
+        httpStatus: pageData?.status,
+        hasJsonLd: metadata?.jsonLd?.length > 0,
+        hasMicrodata: Object.keys(metadata?.microdata || {}).length > 0,
+        hasOpenGraph: Object.keys(metadata?.openGraph || {}).length > 0,
+        acquisitionMethod,
+        resolutionStatus,
+        provenanceBreakdown: profile.getProvenanceBreakdown(),
+        completeness: profile.getCompleteness(),
+      },
+      cached: false,
+    };
+
+    // Cache the result
+    this.setCachedExtraction(googleMapsUrl, result);
+
+    return result;
+  }
+
+  /**
+   * Extract from user-provided data
+   */
+  async extractFromUserData(userData) {
+    const processed = UserProvidedDataProvider.process(userData);
+    const profile = new BusinessProfile();
+    profile.merge(processed, 'user_provided', 1.0);
+    
+    return {
+      ...profile.toObject(),
+      metadata: {
+        source: 'user_provided',
+        extractedAt: new Date().toISOString(),
+        provenanceBreakdown: profile.getProvenanceBreakdown(),
+        completeness: profile.getCompleteness(),
+      },
+      cached: false,
+    };
+  }
+
+  /**
+   * Clear cache (for testing/admin)
+   */
+  clearCache() {
+    extractionCache.clear();
+  }
+
+  /**
+   * Get cache stats
+   */
+  getCacheStats() {
+    return {
+      size: extractionCache.size,
+      entries: Array.from(extractionCache.entries()).map(([key, value]) => ({
+        key: key.substring(0, 16) + '...',
+        normalizedUrl: value.normalizedUrl,
+        timestamp: value.timestamp,
+      })),
+    };
+  }
+}
+
+export default new BusinessDataExtractor();
