@@ -16,18 +16,72 @@ class BusinessResearchService {
         throw new Error('Business data is required');
       }
 
-      // Handle both old Google Places format and new extraction format
-      const isNewFormat = extractedData.business !== undefined;
-      
+      const isFlatProfile =
+        extractedData.identity !== undefined ||
+        extractedData.contact !== undefined ||
+        extractedData.location !== undefined ||
+        extractedData.metadata !== undefined ||
+        extractedData.confidence !== undefined;
+
+      const normalizedData = isFlatProfile ? this.normalizeFlatProfile(extractedData) : extractedData;
+      const isNewFormat = normalizedData.business !== undefined;
+
       if (isNewFormat) {
-        return this.extractFromNewFormat(extractedData);
+        return this.extractFromNewFormat(normalizedData);
       } else {
-        return this.extractFromGooglePlacesFormat(extractedData);
+        return this.extractFromGooglePlacesFormat(normalizedData);
       }
     } catch (error) {
       console.error('Business research extraction error:', error);
       throw error;
     }
+  }
+
+  normalizeFlatProfile(data) {
+    if (!data || typeof data !== 'object') return data;
+
+    const flattened = {
+      business: {
+        name: data['identity.name'] ?? data.business?.name ?? null,
+        category: data['identity.category'] ?? data.business?.category ?? null,
+        categories: data['identity.categories'] ?? data.business?.categories ?? [],
+        description: data['identity.description'] ?? data.business?.description ?? null,
+        business_type: data['identity.business_type'] ?? data.business?.business_type ?? null,
+      },
+      contact: {
+        phone: data['contact.phone'] ?? data.contact?.phone ?? null,
+        email: data['contact.email'] ?? data.contact?.email ?? null,
+        website: data['contact.website'] ?? data.contact?.website ?? null,
+      },
+      location: {
+        full_address: data['location.full_address'] ?? data.location?.full_address ?? null,
+        street: data['location.street'] ?? data.location?.street ?? null,
+        city: data['location.city'] ?? data.location?.city ?? null,
+        state: data['location.state'] ?? data.location?.state ?? null,
+        country: data['location.country'] ?? data.location?.country ?? null,
+        postal_code: data['location.postal_code'] ?? data.location?.postal_code ?? null,
+        latitude: data['location.coordinates']?.lat ?? data.location?.latitude ?? data.location?.coordinates?.lat ?? null,
+        longitude: data['location.coordinates']?.lng ?? data.location?.longitude ?? data.location?.coordinates?.lng ?? null,
+      },
+      ratings: {
+        rating: data['ratings.rating'] ?? data.ratings?.rating ?? null,
+        review_count: data['ratings.review_count'] ?? data.ratings?.review_count ?? null,
+      },
+      hours: data.hours ?? {},
+      reviews: data.reviews ?? [],
+      services: data.services ?? [],
+      products: data.products ?? [],
+      amenities: data.amenities ?? [],
+      social_links: data.social_links ?? [],
+      pricing: data.pricing ?? null,
+      booking_url: data.booking_url ?? null,
+      source_urls: data.source_urls ?? [],
+      confidence: data.confidence ?? {},
+      metadata: data.metadata ?? {},
+      cached: data.cached ?? false,
+    };
+
+    return flattened;
   }
 
   /**
