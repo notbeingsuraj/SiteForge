@@ -219,4 +219,153 @@ class OfficialWebsiteProvider {
       visibleText: this.extractVisibleText(html),
     };
   }
+
+  /**
+   * Extract business information from structured metadata
+   * @param {Object} metadata - Extracted metadata
+   * @returns {Object} Business profile fields (or nulls if not found)
+   */
+  normalizeMetadata(metadata, sourceUrl) {
+    const result = {
+      business: {
+        name: null,
+        description: null,
+        category: null,
+      },
+      contact: {
+        phone: null,
+        email: null,
+        website: sourceUrl,
+      },
+      location: {
+        full_address: null,
+        city: null,
+        state: null,
+        country: null,
+        coordinates: null,
+      },
+      ratings: {
+        rating: null,
+        review_count: null,
+      },
+      social_links: [],
+      provenance: {
+        source: 'official_website',
+        sourceUrl,
+        extractedAt: new Date().toISOString(),
+      },
+    };
+
+    // Extract from JSON-LD (highest priority)
+    for (const jsonLd of metadata.jsonLd) {
+      // Handle @graph
+      const items = jsonLd['@graph'] || [jsonLd];
+      for (const item of items) {
+        const types = Array.isArray(item['@type']) ? item['@type'] : [item['@type']];
+        const isOrg = types.includes('Organization') || types.includes('LocalBusiness') || 
+                      types.includes('Restaurant') || types.includes('Store') || 
+                      types.some(t => typeof t === 'string' && t.includes('Business'));
+        
+        if (isOrg) {
+          if (!result.business.name && item.name) result.business.name = typeof item.name === 'string' ? item.name : null;
+          if (!result.business.description && item.description) result.business.description = item.description;
+          
+          // ContactPoint / telephone
+          if (item.telephone && !result.contact.phone) result.contact.phone = item.telephone;
+          if (item.email && !result.contact.email) result.contact.email = item.email;
+          
+          // Address
+          if (item.address && !result.location.full_address) {
+            const addr = item.address;
+            const addrStr = [addr.streetAddress, addr.addressLocality, addr.addressRegion, addr.postalCode, addr.addressCountry]
+              .filter(Boolean).join(', ');
+            if (addrStr) result.location.full_address = addrStr;
+            if (addr.addressLocality && !result.location.city) result.location.city = addr.addressLocality;
+            if (addr.addressRegion && !result.location.state) result.location.state = addr.addressRegion;
+            if (addr.addressCountry && !result.location.country) result.location.country = addr.addressCountry;
+          }
+          
+          // Geo coordinates
+          if (item.geo && !result.location.coordinates) {
+            result.location.coordinates = {
+              lat: item.geo.latitude || null,
+              lng: item.geo.longitude || null,
+            };
+          }
+          
+          // SameAs / social links
+          if (item.sameAs && Array.isArray(item.sameAs)) {
+            result.social_links.push(...item.sameAs);
+          }
+          
+          // AggregateRating
+          if (item.aggregateRating) {
+            if (item.aggregateRating.ratingValue && !result.ratings.rating) {
+              result.ratings.rating = parseFloat(item.aggregateRating.ratingValue);
+            }
+            if (item.aggregateRating.reviewCount && !result.ratings.review_count) {
+              result.ratings.review_count = parseInt(item.aggregateRating.reviewCount);
+            }
+          }
+        }
+        
+        // WebSite type may have name/description
+        if (types.includes('WebSite') && !result.business.name && item.name) {
+          result.business.name = typeof item.name === 'string' ? item.name : null;
+        }
+      }
+    }
+
+    // Extract from OpenGraph (secondary)
+    if (!result.business.name && metadata.openGraph?.site_name) {
+      result.business.name = metadata.openGraph.site_name;
+    }
+    if (!result.business.description && metadata.openGraph?.description) {
+      result.business.description = metadata.openGraph.description;
+    }
+
+    // Extract from microdata (tertiary)
+    if (!result.business.name && metadata.microdata?.name) {
+      result.business.name = metadata.microdata.name;
+    }
+    if (!result.business.description && metadata.microdata?.description) {
+      result.business.description = metadata.microdata.description;
+    }
+    if (!result.contact.phone && metadata.microdata?.telephone) {
+      result.contact.phone = metadata.microdata.telephone;
+    }
+
+    return result;
+  }
+
+  /**
+   * Extract business data from a website URL
+   * @param {string} url - Website URL to process
+   * @returns {Promise<Object>} Structured business data with provenance
+   */
+  async extract(url) {
+    const pageData = await this.fetch(url);
+    
+    if (pageData.status >= 400) {
+      throw new Error(`Failed to fetch website: HTTP ${pageData.status}`);
+    }
+
+    const metadata = this.extractMetadata(pageData.html);
+    const normalized = this.normalizeMetadata(metadata, pageData.url);
+    
+    return {
+      ...normalized,
+      metadata: {
+        sourceUrl: pageData.url,
+        originalUrl: url,
+        httpStatus: pageData.status,
+        hasJsonLd: metadata.jsonLd.length > 0,
+        hasMicrodata: Object.keys(metadata.microdata).length > 0,
+        hasOpenGraph: Object.keys(metadata.openGraph).length > 0,
+        extractedAt: new Date().toISOString(),
+      },
+    };
+  }
 }
+
+export default OfficialWebsiteProvider;
