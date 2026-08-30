@@ -1,7 +1,8 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, Link, useLocation } from 'react-router-dom';
 import Navbar from './Navbar';
 
 export default function Layout() {
+  const location = useLocation();
   return (
     <div className="min-h-screen bg-[#F5F5F7] text-[#111111]">
       <div className="mx-auto flex max-w-[1600px] gap-6 px-4 py-4 lg:px-6">
@@ -18,10 +19,10 @@ export default function Layout() {
             </div>
 
             <nav className="mt-4 space-y-1">
-              <SidebarItem label="Overview" to="/" active />
-              <SidebarItem label="Leads" to="/" />
-              <SidebarItem label="Analyse" to="/leads/new" />
-              <SidebarItem label="Websites" to="/" />
+              <SidebarItem label="Overview" to="/" active={location.pathname === '/'} />
+              <SidebarItem label="Leads" to="/" active={location.pathname === '/'} />
+              <SidebarItem label="Analyse" to="/leads/new" active={location.pathname === '/leads/new'} />
+              <SidebarItem label="Websites" to="/websites" active={location.pathname === '/websites'} />
               <SidebarItem label="Settings" to="/" />
             </nav>
 
@@ -46,8 +47,8 @@ export default function Layout() {
 
 function SidebarItem({ label, to, active = false }: { label: string; to: string; active?: boolean }) {
   return (
-    <a
-      href={to}
+    <Link
+      to={to}
       className={[
         'flex items-center rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
         active ? 'bg-[#111111] text-white' : 'text-[#6E6E73] hover:bg-[#F5F5F7] hover:text-[#111111]',
@@ -55,7 +56,7 @@ function SidebarItem({ label, to, active = false }: { label: string; to: string;
     >
       <span className="inline-block h-2 w-2 rounded-full bg-current opacity-80" />
       <span className="ml-3">{label}</span>
-    </a>
+    </Link>
   );
 }
 
