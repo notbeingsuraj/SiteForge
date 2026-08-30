@@ -18,10 +18,10 @@ export const config = {
     apiKey: process.env.OMNIROUTE_API_KEY,
     baseUrl: process.env.OMNIROUTE_BASE_URL || 'http://localhost:20128/v1',
     models: {
-      fast: process.env.OMNIROUTE_FAST_MODEL || 'hy3-free',
-      reasoning: process.env.OMNIROUTE_REASONING_MODEL || 'hy3-free',
+      fast: process.env.OMNIROUTE_FAST_MODEL || 'auto/best-fast',
+      reasoning: process.env.OMNIROUTE_REASONING_MODEL || 'auto/best-reasoning',
       coding: process.env.OMNIROUTE_CODING_MODEL || 'auto/best-coding',
-      copywriting: process.env.OMNIROUTE_COPYWRITING_MODEL || 'hy3-free',
+      copywriting: process.env.OMNIROUTE_COPYWRITING_MODEL || 'auto/best-fast',
     },
   },
   rateLimit: {

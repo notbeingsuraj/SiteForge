@@ -1,3 +1,5 @@
+import axios from 'axios';
+
 /**
  * OfficialWebsiteProvider
  * 
@@ -24,17 +26,12 @@ class OfficialWebsiteProvider {
    * Get (or initialize) the HTTP client with SSRF protection
    * @private
    */
-  _getClient() {
+  async _getClient() {
     if (this.axios) return this.axios;
     
-    // Lazy import to avoid circular dependencies
     try {
-      // Use require-style dynamic import
-      const { config } = require('../config/env.js');
+      const { config } = await import('../config/env.js');
       this.config = config;
-      
-      // We need axios available
-      const axios = require('axios');
       this.axios = axios.create({
         timeout: config.extraction.timeout,
         headers: {
@@ -105,7 +102,7 @@ class OfficialWebsiteProvider {
    */
   async fetch(url) {
     this.validateFetchUrl(url);
-    const client = this._getClient();
+    const client = await this._getClient();
 
     try {
       const response = await client.get(url);
