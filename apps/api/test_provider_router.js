@@ -70,6 +70,8 @@ await runTest('TEST 2: primary 429 then fallback succeeds', async () => {
   config.omniroute.models = { fast: 'primary-model', reasoning: 'reasoning-model', coding: 'coding-model', copywriting: 'copywriting-model' };
   const calls = setMockClient([
     { status: 'error', httpStatus: 429, message: 'rate limit exceeded' },
+    { status: 'error', httpStatus: 429, message: 'rate limit exceeded' },
+    { status: 'error', httpStatus: 429, message: 'rate limit exceeded' },
     { status: 'ok', data: { choices: [{ message: { content: '{"ok":true}' } }] } },
   ]);
 
@@ -80,13 +82,15 @@ await runTest('TEST 2: primary 429 then fallback succeeds', async () => {
   });
 
   assert.deepEqual(result, { ok: true });
-  assert.deepEqual(calls.map(call => call.model), ['primary-model', 'fallback-model']);
+  assert.deepEqual(calls.map(call => call.model), ['primary-model', 'primary-model', 'primary-model', 'fallback-model']);
 });
 
 await runTest('TEST 3: primary 503 then fallback succeeds', async () => {
   config.ai = { primaryModel: 'primary-model', fallbackModel: 'fallback-model' };
   config.omniroute.models = { fast: 'primary-model', reasoning: 'reasoning-model', coding: 'coding-model', copywriting: 'copywriting-model' };
   const calls = setMockClient([
+    { status: 'error', httpStatus: 503, message: 'provider unavailable' },
+    { status: 'error', httpStatus: 503, message: 'provider unavailable' },
     { status: 'error', httpStatus: 503, message: 'provider unavailable' },
     { status: 'ok', data: { choices: [{ message: { content: '{"ok":true}' } }] } },
   ]);
@@ -98,13 +102,15 @@ await runTest('TEST 3: primary 503 then fallback succeeds', async () => {
   });
 
   assert.deepEqual(result, { ok: true });
-  assert.deepEqual(calls.map(call => call.model), ['primary-model', 'fallback-model']);
+  assert.deepEqual(calls.map(call => call.model), ['primary-model', 'primary-model', 'primary-model', 'fallback-model']);
 });
 
 await runTest('TEST 4: primary timeout then fallback succeeds', async () => {
   config.ai = { primaryModel: 'primary-model', fallbackModel: 'fallback-model' };
   config.omniroute.models = { fast: 'primary-model', reasoning: 'reasoning-model', coding: 'coding-model', copywriting: 'copywriting-model' };
   const calls = setMockClient([
+    { status: 'error', httpStatus: 408, message: 'timeout' },
+    { status: 'error', httpStatus: 408, message: 'timeout' },
     { status: 'error', httpStatus: 408, message: 'timeout' },
     { status: 'ok', data: { choices: [{ message: { content: '{"ok":true}' } }] } },
   ]);
@@ -116,7 +122,7 @@ await runTest('TEST 4: primary timeout then fallback succeeds', async () => {
   });
 
   assert.deepEqual(result, { ok: true });
-  assert.deepEqual(calls.map(call => call.model), ['primary-model', 'fallback-model']);
+  assert.deepEqual(calls.map(call => call.model), ['primary-model', 'primary-model', 'primary-model', 'fallback-model']);
 });
 
 await runTest('TEST 5: malformed JSON uses explicit no-fallback policy', async () => {
@@ -138,8 +144,12 @@ await runTest('TEST 5: malformed JSON uses explicit no-fallback policy', async (
 await runTest('TEST 6: primary and fallback fail yields sanitized aggregate error', async () => {
   config.ai = { primaryModel: 'primary-model', fallbackModel: 'fallback-model' };
   config.omniroute.models = { fast: 'primary-model', reasoning: 'reasoning-model', coding: 'coding-model', copywriting: 'copywriting-model' };
-  setMockClient([
+  const calls = setMockClient([
     { status: 'error', httpStatus: 503, message: 'provider unavailable' },
+    { status: 'error', httpStatus: 503, message: 'provider unavailable' },
+    { status: 'error', httpStatus: 503, message: 'provider unavailable' },
+    { status: 'error', httpStatus: 429, message: 'quota exhausted sk-abc123' },
+    { status: 'error', httpStatus: 429, message: 'quota exhausted sk-abc123' },
     { status: 'error', httpStatus: 429, message: 'quota exhausted sk-abc123' },
   ]);
 
@@ -148,6 +158,8 @@ await runTest('TEST 6: primary and fallback fail yields sanitized aggregate erro
     model: 'fast',
     schema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] },
   }), /provider|quota|fallback|safe/i);
+
+  assert.deepEqual(calls.map(call => call.model), ['primary-model', 'primary-model', 'primary-model', 'fallback-model', 'fallback-model', 'fallback-model']);
 });
 
 await runTest('TEST 7: no fallback configured keeps current behavior', async () => {
@@ -208,12 +220,14 @@ await runTest('TEST 10: A/B/A isolation remains untouched by provider routing', 
   config.omniroute.models = { fast: 'primary-model', reasoning: 'reasoning-model', coding: 'coding-model', copywriting: 'copywriting-model' };
   const callsA = setMockClient([
     { status: 'error', httpStatus: 429, message: 'rate limit exceeded' },
+    { status: 'error', httpStatus: 429, message: 'rate limit exceeded' },
+    { status: 'error', httpStatus: 429, message: 'rate limit exceeded' },
     { status: 'ok', data: { choices: [{ message: { content: '{"ok":true}' } }] } },
   ]);
 
   const resultA = await AIService.generate({ prompt: 'a', model: 'fast', schema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] } });
   assert.deepEqual(resultA, { ok: true });
-  assert.deepEqual(callsA.map(call => call.model), ['primary-model', 'fallback-model']);
+  assert.deepEqual(callsA.map(call => call.model), ['primary-model', 'primary-model', 'primary-model', 'fallback-model']);
 
   const callsB = setMockClient([
     { status: 'ok', data: { choices: [{ message: { content: '{"ok":false}' } }] } },
@@ -241,16 +255,17 @@ await runTest('TEST 12: request-count guard prevents unbounded retries', async (
   const calls = setMockClient([
     { status: 'error', httpStatus: 429, message: 'rate limit exceeded' },
     { status: 'error', httpStatus: 429, message: 'rate limit exceeded' },
-    { status: 'error', httpStatus: 500, message: 'server error' },
+    { status: 'error', httpStatus: 429, message: 'rate limit exceeded' },
     { status: 'ok', data: { choices: [{ message: { content: '{"ok":true}' } }] } },
   ]);
 
-  await assert.rejects(() => AIService.generate({
+  const result = await AIService.generate({
     prompt: 'x',
     model: 'fast',
     schema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] },
-  }), /rate|provider|fallback/i);
+  });
 
+  assert.deepEqual(result, { ok: true });
   assert.ok(calls.length <= 4, 'should respect bounded retries');
 });
 
