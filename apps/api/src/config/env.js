@@ -14,6 +14,10 @@ export const config = {
   port: process.env.PORT || 5001,
   nodeEnv: process.env.NODE_ENV || 'development',
   debugBusinessAnalysis: process.env.DEBUG_BUSINESS_ANALYSIS === 'true',
+  ai: {
+    primaryModel: process.env.AI_PRIMARY_MODEL || null,
+    fallbackModel: process.env.AI_FALLBACK_MODEL || null,
+  },
   omniroute: {
     apiKey: process.env.OMNIROUTE_API_KEY,
     baseUrl: process.env.OMNIROUTE_BASE_URL || 'http://localhost:20128/v1',
