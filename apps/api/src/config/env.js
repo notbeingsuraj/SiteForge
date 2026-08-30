@@ -38,4 +38,10 @@ export const config = {
     maxRetries: parseInt(process.env.EXTRACTION_MAX_RETRIES) || 2,
     userAgent: 'SiteForge/1.0 (+https://siteforge.app)',
   },
+  geoapify: {
+    apiKey: process.env.GEOAPIFY_API_KEY || null,
+    baseUrl: process.env.GEOAPIFY_BASE_URL || 'https://api.geoapify.com/v2/places',
+    timeout: parseInt(process.env.GEOAPIFY_TIMEOUT_MS) || 10000,
+    maxResults: parseInt(process.env.GEOAPIFY_MAX_RESULTS) || 5,
+  },
 };

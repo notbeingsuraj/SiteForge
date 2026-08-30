@@ -6,6 +6,12 @@
  * Now works with BusinessDataExtractor output (no Google Maps API required).
  */
 
+import BusinessProfile from './BusinessProfile.js';
+import GeoapifyProvider from './providers/GeoapifyProvider.js';
+import WebExtractionProvider from './providers/WebExtractionProvider.js';
+import { extractDeterministicHints } from './providers/ProviderAdapter.js';
+import { validateBusinessProfile, sanitizeFieldValue } from './BusinessProfileValidator.js';
+
 class BusinessResearchService {
   /**
    * Extract business information from new extraction format and return structured JSON
