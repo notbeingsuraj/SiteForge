@@ -627,7 +627,7 @@ Rules:
         amenities: [],
         social_links: [],
         pricing: null,
-        booking_url: null,
+          booking_url: null,
         source_urls: [googleMapsUrl],
         confidence: { overall: 0, name: identified.placeName ? 0.5 : 0, category: 0, phone: 0, website: 0, address: 0, rating: 0 },
       };
