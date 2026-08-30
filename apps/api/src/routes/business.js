@@ -31,14 +31,33 @@ router.post('/analyze', async (req, res, next) => {
       });
     }
 
-    // Extract business data from public page
     const extractedData = await BusinessDataExtractor.extractFromGoogleMapsUrl(googleMapsUrl);
-    
-    // Transform to normalized BusinessProfile
+
+    if (extractedData?.metadata?.providerUnavailable || extractedData?.providerUnavailable) {
+      const providerError = extractedData?.metadata?.providerError || extractedData?.providerError || {
+        category: 'PROVIDER_UNAVAILABLE',
+        httpStatus: null,
+        safeMessage: 'AI provider is unavailable. No business data was produced.',
+      };
+
+      return res.status(503).json({
+        success: false,
+        error: 'provider_unavailable',
+        message: providerError.safeMessage || 'AI provider is unavailable. No business data was produced.',
+        provider: {
+          gateway: extractedData?.metadata?.gateway || 'http://localhost:20128/v1',
+          model: extractedData?.metadata?.model || null,
+          category: providerError.category || 'PROVIDER_UNAVAILABLE',
+          httpStatus: providerError.httpStatus || null,
+          retryCount: providerError.retryCount || 0,
+          retryAttempted: Boolean(providerError.retryAttempted),
+        },
+        data: null,
+      });
+    }
+
     const business = await BusinessResearchService.extractBusinessIntelligence(extractedData);
 
-    // Build Business DNA using existing BrandStrategyService
-    // (imported lazily to avoid circular deps if needed)
     const { default: BrandStrategyService } = await import('../services/BrandStrategyService.js');
     const businessDNA = await BrandStrategyService.generateBrandDNA(business);
 

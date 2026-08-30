@@ -469,8 +469,18 @@ Rules:
       });
       return result;
     } catch (error) {
-      console.error('[BusinessDataExtractor] AI extraction failed:', error.message);
-      // Return a minimal valid structure on failure
+      const providerError = error?.providerError || {
+        category: 'PROVIDER_UNAVAILABLE',
+        httpStatus: null,
+        safeMessage: error?.message || 'AI provider request failed.',
+        retryAttempted: false,
+        retryCount: 0,
+        provider: 'omniroute',
+        model: 'reasoning',
+        success: false,
+      };
+
+      console.error('[BusinessDataExtractor] AI extraction failed:', providerError.safeMessage);
       return {
         business: { name: null, category: null, categories: [], description: null, business_type: null },
         contact: { phone: null, email: null, website: null },
@@ -485,7 +495,14 @@ Rules:
         pricing: null,
         booking_url: null,
         source_urls: [sourceUrl],
-        confidence: { overall: 0, name: 0, category: 0, phone: 0, website: 0, address: 0, rating: 0 }
+        confidence: { overall: 0, name: 0, category: 0, phone: 0, website: 0, address: 0, rating: 0 },
+        providerError,
+        providerUnavailable: true,
+        metadata: {
+          providerError,
+          providerUnavailable: true,
+          extractionStatus: 'provider_unavailable',
+        }
       };
     }
   }
@@ -702,6 +719,10 @@ Rules:
         resolutionStatus,
         provenanceBreakdown: profile.getProvenanceBreakdown(),
         completeness: profile.getCompleteness(),
+        providerError: extractedProfile?.providerError || null,
+        providerUnavailable: Boolean(extractedProfile?.providerUnavailable),
+        gateway: config.omniroute.baseUrl,
+        model: config.omniroute.models.reasoning,
       },
       cached: false,
     };
