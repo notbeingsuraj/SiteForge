@@ -37,18 +37,32 @@ export function mapGeoapifyFeatureToProfile(feature) {
   if (!feature || !feature.properties) return null;
 
   const p = feature.properties;
-  const coords = feature.geometry?.coordinates; // Geoapify returns [lng, lat]
-  const latitude = typeof coords?.[1] === 'number' ? coords[1] : null;
-  const longitude = typeof coords?.[0] === 'number' ? coords[0] : null;
+
+  // Coordinates come in two shapes:
+  //  - place-details: properties.lat / properties.lon
+  //  - places / geocode-feature: geometry.coordinates = [lng, lat]
+  const geomCoords = feature.geometry?.coordinates; // Geoapify returns [lng, lat]
+  const latitude =
+    typeof p.lat === 'number' ? p.lat :
+    Array.isArray(geomCoords) && typeof geomCoords[1] === 'number' ? geomCoords[1] : null;
+  const longitude =
+    typeof p.lon === 'number' ? p.lon :
+    Array.isArray(geomCoords) && typeof geomCoords[0] === 'number' ? geomCoords[0] : null;
 
   const name = p.name || p.address_line1 || null;
   if (!name) return null; // no usable identity
 
-  // Category: Geoapify categories = array of hierarchical category strings
+  // Category: place-details / places return categories as a hierarchical
+  // array like ["commercial", "commercial.food_and_drink", "commercial.food_and_drink.bakery"].
+  // Prefer the most specific commercial.* entry as the primary category.
   const categories = Array.isArray(p.categories) ? p.categories : [];
-  const primaryCategory = categories[0] || null;
+  const commercialCats = categories.filter((c) => typeof c === 'string' && c.startsWith('commercial.'));
+  const primaryCategory = commercialCats[commercialCats.length - 1] || commercialCats[0] || categories[0] || p.commercial?.type || null;
 
+  // Phone: place-details nests it under contact.phone;
+  // other endpoints may return international_phone / phone / contact_phone.
   const phone =
+    p.contact?.phone ||
     p.international_phone ||
     p.phone ||
     p.contact_phone ||
@@ -63,6 +77,8 @@ export function mapGeoapifyFeatureToProfile(feature) {
 
   const hours = normalizeHours(p.opening_hours);
 
+  // NOTE: Geoapify does NOT reliably return rating / review counts for these
+  // data sources. Capture only if present; leave null otherwise — do NOT fabricate.
   const rating =
     typeof p.rating === 'number' ? p.rating :
     typeof p.rating?.value === 'number' ? p.rating.value : null;
@@ -72,7 +88,7 @@ export function mapGeoapifyFeatureToProfile(feature) {
     typeof p.rating?.number_of_reviews === 'number' ? p.rating.number_of_reviews : null;
 
   const confidence = {
-    overall: rating != null ? 0.9 : 0.85,
+    overall: 0.9,
     name: name ? 0.98 : 0,
     category: primaryCategory ? 0.9 : 0,
     phone: phone ? 0.95 : 0,
@@ -91,7 +107,7 @@ export function mapGeoapifyFeatureToProfile(feature) {
     },
     contact: {
       phone,
-      email: p.email || null,
+      email: p.email || p.contact?.email || null,
       website,
     },
     location: {
@@ -126,14 +142,25 @@ export function mapGeoapifyFeatureToProfile(feature) {
  * Normalize Geoapify opening_hours (either day->range map or array form)
  * into SiteForge's canonical { monday..sunday } map.
  */
-function normalizeHours(openingHours) {
+/**
+ * Normalize Geoapify opening_hours into SiteForge's canonical
+ * { monday..sunday } map. Accepts three shapes:
+ *   - string "Mo-Su 07:30-18:00"            (place-details format)
+ *   - day->range map { monday: "09:00-17:00" } (places / geocode format)
+ *   - array [{ day_of_week, start_time, end_time }]
+ */
+export function normalizeHours(openingHours) {
   const out = {};
   if (!openingHours) return out;
 
-  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  // String form, e.g. "Mo-Su 07:30-18:00" (place-details)
+  if (typeof openingHours === 'string' && openingHours.trim()) {
+    return parseHoursString(openingHours);
+  }
 
-  // Map form: { monday: "09:00-17:00", ... } (Geoapify uses this)
+  // Map form: { monday: "09:00-17:00", ... }
   if (typeof openingHours === 'object' && !Array.isArray(openingHours)) {
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
     for (const day of days) {
       const val = openingHours[day];
       if (val) out[day] = typeof val === 'string' ? val : Array.isArray(val) ? val.join(', ') : String(val);
@@ -143,6 +170,7 @@ function normalizeHours(openingHours) {
 
   // Array form: [{ day_of_week: 1, start_time, end_time }]
   if (Array.isArray(openingHours)) {
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
     for (const entry of openingHours) {
       const idx = entry?.day_of_week;
       if (idx == null || idx < 0 || idx > 6) continue;
@@ -154,6 +182,66 @@ function normalizeHours(openingHours) {
   }
 
   return out;
+}
+
+/**
+ * Day-abbreviation map for Geoapify's compact opening-hours strings.
+ */
+const DAY_ABBR = {
+  Mo: 'monday', Tu: 'tuesday', We: 'wednesday', Th: 'thursday',
+  Fr: 'friday', Sa: 'saturday', Su: 'sunday',
+};
+const DAY_ORDER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+/**
+ * Parse a compact Geoapify opening-hours string, e.g.
+ *   "Mo-Su 07:30-18:00"
+ *   "Mo-Fr 08:00-17:00, Sa 09:00-14:00"
+ *   "Mo-Su 11:00-14:00, 18:00-22:00"
+ * into a { monday..sunday } day->range map.
+ */
+export function parseHoursString(str) {
+  const out = {};
+  // Split into comma-separated day groups
+  const groups = str.split(',').map((s) => s.trim()).filter(Boolean);
+  for (const group of groups) {
+    const m = group.match(/^([A-Za-z]{2}(?:\s*-\s*[A-Za-z]{2})?)\s+(.+)$/);
+    if (!m) continue;
+    const dayToken = m[1].replace(/\s+/g, '');
+    const timeRange = m[2].trim();
+    const days = expandDayToken(dayToken);
+    for (const day of days) {
+      // Keep first (most specific) value per day; merge second ranges if present
+      if (out[day] && timeRange && !out[day].includes(timeRange)) {
+        out[day] = `${out[day]}, ${timeRange}`;
+      } else if (!out[day]) {
+        out[day] = timeRange;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Expand a Geoapify day token ("Mo-Su", "Mo-Fr", "Sa-Su", "Mo", etc.)
+ * into an ordered array of canonical day names.
+ */
+export function expandDayToken(token) {
+  const dash = token.match(/^([A-Za-z]{2})-([A-Za-z]{2})$/);
+  let days = [];
+  if (dash) {
+    const start = DAY_ABBR[dash[1]];
+    const end = DAY_ABBR[dash[2]];
+    if (start && end) {
+      const si = DAY_ORDER.indexOf(start);
+      const ei = DAY_ORDER.indexOf(end);
+      const step = si <= ei ? 1 : -1;
+      for (let i = si; step > 0 ? i <= ei : i >= ei; i += step) days.push(DAY_ORDER[i]);
+    }
+  } else if (DAY_ABBR[token]) {
+    days = [DAY_ABBR[token]];
+  }
+  return days;
 }
 
 /**
@@ -205,4 +293,7 @@ export function extractDeterministicHints(input = {}) {
 export default {
   mapGeoapifyFeatureToProfile,
   extractDeterministicHints,
+  normalizeHours,
+  parseHoursString,
+  expandDayToken,
 };

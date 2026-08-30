@@ -58,7 +58,6 @@ class GeoapifyProvider extends BusinessDataProvider {
   _getClient() {
     if (this._client) return this._client;
     this._client = axios.create({
-      baseURL: config.geoapify.baseUrl,
       timeout: config.geoapify.timeout,
       paramsSerializer: {
         indexes: false,
@@ -69,7 +68,15 @@ class GeoapifyProvider extends BusinessDataProvider {
   }
 
   /**
-   * Search for businesses using deterministic hints.
+   * Search for businesses using Geoapify's geocode endpoint and optionally
+   * enrich the top match with place-details (phone, website, hours).
+   *
+   * NOTE: Geoapify's `/v2/places` endpoint is category-driven and requires a
+   * `type` or `categories` param — it is NOT suitable for free-text business
+   * search. We therefore use the `/v1/geocode/search` endpoint (a "find a
+   * place by name" API that returns a place_id), then enrich with the
+   * `/v2/place-details` endpoint which supplies contact.phone, website,
+   * opening_hours and hierarchical categories.
    *
    * @param {Object} hints - { name, city, state, country, latitude, longitude, query }
    * @param {Object} options
@@ -90,7 +97,7 @@ class GeoapifyProvider extends BusinessDataProvider {
       limit: options.limit || config.geoapify.maxResults || 5,
     };
 
-    // Preferred: text search; bias with coordinates when available
+    // Geocode search by business name; bias with coordinates when available
     if (text) params.text = text;
     if (lat != null && lng != null) params.bias = `proximity:${lng},${lat}`;
 
@@ -101,7 +108,7 @@ class GeoapifyProvider extends BusinessDataProvider {
 
     try {
       const client = this._getClient();
-      const response = await client.get('', { params });
+      const response = await client.get(config.geoapify.geocodeUrl, { params });
 
       const features = response.data?.features;
       if (!Array.isArray(features) || features.length === 0) {
@@ -131,7 +138,40 @@ class GeoapifyProvider extends BusinessDataProvider {
   }
 
   /**
+   * Fetch extended place details (phone, website, opening_hours, categories)
+   * for a given place_id via the Geoapify `/v2/place-details` endpoint.
+   *
+   * On failure this returns null so the caller can proceed with the geocode
+   * result alone — enrichment is best-effort.
+   *
+   * @param {string} placeId
+   * @returns {Promise<Object|null>} canonical profile or null
+   */
+  async _fetchPlaceDetails(placeId) {
+    if (!placeId) return null;
+    try {
+      const client = this._getClient();
+      const response = await client.get(config.geoapify.placeDetailsUrl, {
+        params: { apiKey: config.geoapify.apiKey, id: placeId },
+      });
+      const features = response.data?.features;
+      if (!Array.isArray(features) || features.length === 0) return null;
+      return mapGeoapifyFeatureToProfile(features[0]);
+    } catch (error) {
+      // Best-effort enrichment — do not fail the whole lookup on details failure
+      const status = this._classifyError(error);
+      if (status !== GEOAPIFY_STATUS.NO_RESULT && status !== GEOAPIFY_STATUS.TIMEOUT) {
+        this._logSafe(status, error);
+      }
+      return null;
+    }
+  }
+
+  /**
    * Return the best-matching normalized business record for the hints.
+   * Enriches the chosen record with place-details (phone/website/hours) when
+   * a place_id is available.
+   *
    * @returns {Promise<Object|null>}
    */
   async getBusiness(hints, options = {}) {
@@ -142,10 +182,10 @@ class GeoapifyProvider extends BusinessDataProvider {
 
     // If coordinates were supplied, prefer the record closest to them;
     // otherwise take the top-ranked record from the API.
+    let best = records[0];
     const lat = hints?.latitude;
     const lng = hints?.longitude;
     if (lat != null && lng != null) {
-      let best = records[0];
       let bestDist = Infinity;
       for (const rec of records) {
         const c = rec.location?.coordinates;
@@ -156,9 +196,68 @@ class GeoapifyProvider extends BusinessDataProvider {
           best = rec;
         }
       }
-      return best;
     }
-    return records[0];
+
+    // Best-effort enrichment: pull place-details (phone/website/hours/categories)
+    const placeId = best?.provider?.placeId;
+    if (placeId) {
+      const details = await this._fetchPlaceDetails(placeId);
+      if (details) {
+        best = this._mergeDetails(best, details);
+      }
+    }
+
+    return best;
+  }
+
+  /**
+   * Merge place-details fields into the geocode-derived profile, preferring
+   * the more complete place-details values but never discarding coords/identity.
+   */
+  _mergeDetails(base, details) {
+    // Start from the details profile (has phone/website/hours/categories), then
+    // carry over identity/coords from the geocode base if details lacked them.
+    const merged = {};
+    const setIf = (dst, src, key) => {
+      const v = src?.[key];
+      if (v != null) dst[key] = v;
+    };
+
+    // business
+    merged.business = { ...base.business };
+    setIf(merged.business, details?.business, 'category');
+    setIf(merged.business, details?.business, 'categories');
+    if (details?.business?.description) merged.business.description = details.business.description;
+
+    // contact
+    merged.contact = { ...base.contact };
+    setIf(merged.contact, details?.contact, 'phone');
+    setIf(merged.contact, details?.contact, 'email');
+    setIf(merged.contact, details?.contact, 'website');
+
+    // location
+    merged.location = { ...base.location };
+    setIf(merged.location, details?.location, 'full_address');
+    setIf(merged.location, details?.location, 'postal_code');
+    setIf(merged.location, details?.location, 'street');
+
+    // ratings (Geoapify rarely returns these; keep if present)
+    merged.ratings = { ...base.ratings };
+    if (details?.ratings?.rating != null) merged.ratings.rating = details.ratings.rating;
+    if (details?.ratings?.review_count != null) merged.ratings.review_count = details.ratings.review_count;
+
+    // hours — prefer details hours when non-empty
+    const detailsHours = details?.hours && Object.keys(details.hours).length ? details.hours : null;
+    merged.hours = detailsHours || base.hours || {};
+
+    // services
+    merged.services = details?.services && details.services.length ? details.services : base.services || [];
+
+    // Keep geocode-derived coords/placeId
+    merged.location.coordinates = base.location?.coordinates || details?.location?.coordinates || null;
+    merged.provider = { ...base.provider, ...(details?.provider || {}) };
+
+    return merged;
   }
 
   /**

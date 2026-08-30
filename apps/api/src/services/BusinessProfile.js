@@ -53,7 +53,7 @@ class BusinessProfile {
   }
 
   set(path, value, provenance, confidence, sourceInfo = {}) {
-    const validProvenances = ['identified', 'discovered', 'verified', 'user_provided'];
+    const validProvenances = ['identified', 'discovered', 'verified', 'user_provided', 'inferred'];
     if (!validProvenances.includes(provenance)) {
       throw new Error(`Invalid provenance: ${provenance}. Must be one of: ${validProvenances.join(', ')}`);
     }

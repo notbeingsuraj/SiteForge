@@ -73,20 +73,33 @@ export function validateBusinessProfile(profile) {
   const issues = [];
   const profileObj = profile && typeof profile === 'object' ? profile : {};
 
-  // Support both canonical shapes (tolerant read).
-  const name = profileObj.business?.name ?? profileObj.identity?.name?.value ?? profileObj.identity?.name ?? null;
-  const category = profileObj.business?.category ?? profileObj.identity?.category?.value ?? profileObj.identity?.category ?? null;
-  const phone = profileObj.contact?.phone ?? profileObj.contact?.phone?.value ?? null;
-  const website = profileObj.contact?.website ?? profileObj.contact?.website?.value ?? null;
-  const address = profileObj.location?.full_address ?? profileObj.location?.full_address?.value ?? profileObj.location?.address ?? null;
+  // Support canonical shapes (tolerant read). SiteForge has several:
+  //   - flat canonical shape: business.name / contact.phone / location.full_address
+  //   - nested BusinessProfile.data shape: identity.name.{value,..}
+  //   - flattened dotted-path shape (BusinessProfile.toObject):
+  //       "identity.name", "contact.phone", "location.coordinates"={lat,lng}, "ratings.rating"
+  const flat = (path) => profileObj[path];
+  const nested = (group, field) => profileObj?.[group]?.[field];
+  const nestedVal = (group, field) => {
+    const v = nested(group, field);
+    return v && typeof v === 'object' && 'value' in v ? v.value : v;
+  };
 
-  // Coordinates: from location.coordinates {lat,lng} OR lat/lng fields
-  const locCoords = profileObj.location?.coordinates ?? profileObj.location?.coordinates?.value ?? null;
-  const latitude = locCoords?.lat ?? profileObj.location?.latitude ?? null;
-  const longitude = locCoords?.lng ?? profileObj.location?.longitude ?? null;
+  const name = flat('identity.name') ?? nestedVal('identity', 'name') ?? nestedVal('business', 'name') ?? null;
+  const category = flat('identity.category') ?? nestedVal('identity', 'category') ?? nestedVal('business', 'category') ?? null;
+  const phone = flat('contact.phone') ?? nestedVal('contact', 'phone') ?? null;
+  const website = flat('contact.website') ?? nestedVal('contact', 'website') ?? null;
+  const address = flat('location.full_address') ?? flat('location.address') ?? nestedVal('location', 'full_address') ?? nestedVal('location', 'address') ?? null;
 
-  const rating = profileObj.ratings?.rating ?? profileObj.ratings?.rating?.value ?? profileObj.rating ?? null;
-  const reviewCount = profileObj.ratings?.review_count ?? profileObj.ratings?.review_count?.value ?? profileObj.reviewCount ?? profileObj.metadata?.reviewCount ?? null;
+  // Coordinates: flat "location.coordinates"={lat,lng} OR nested location.coordinates OR lat/lng fields
+  const flatCoords = flat('location.coordinates');
+  const nestedCoords = nestedVal('location', 'coordinates');
+  const locCoords = flatCoords ?? nestedCoords ?? null;
+  const latitude = locCoords?.lat ?? flat('location.latitude') ?? nestedVal('location', 'latitude') ?? null;
+  const longitude = locCoords?.lng ?? flat('location.longitude') ?? nestedVal('location', 'longitude') ?? null;
+
+  const rating = flat('ratings.rating') ?? nestedVal('ratings', 'rating') ?? flat('rating') ?? null;
+  const reviewCount = flat('ratings.review_count') ?? nestedVal('ratings', 'review_count') ?? flat('reviewCount') ?? null;
 
   if (!isNonEmptyString(name)) {
     issues.push({ field: 'name', message: 'Business name is missing or empty.' });

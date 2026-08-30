@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
+    "test": "node test_providers.js",
     "build": "echo 'No build step for API'"
   },
   "dependencies": {

@@ -40,7 +40,10 @@ export const config = {
   },
   geoapify: {
     apiKey: process.env.GEOAPIFY_API_KEY || null,
+    // Base endpoints
     baseUrl: process.env.GEOAPIFY_BASE_URL || 'https://api.geoapify.com/v2/places',
+    geocodeUrl: process.env.GEOAPIFY_GEOCODE_URL || 'https://api.geoapify.com/v1/geocode/search',
+    placeDetailsUrl: process.env.GEOAPIFY_PLACE_DETAILS_URL || 'https://api.geoapify.com/v2/place-details',
     timeout: parseInt(process.env.GEOAPIFY_TIMEOUT_MS) || 10000,
     maxResults: parseInt(process.env.GEOAPIFY_MAX_RESULTS) || 5,
   },
