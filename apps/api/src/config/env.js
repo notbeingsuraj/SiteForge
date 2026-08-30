@@ -47,4 +47,14 @@ export const config = {
     timeout: parseInt(process.env.GEOAPIFY_TIMEOUT_MS) || 10000,
     maxResults: parseInt(process.env.GEOAPIFY_MAX_RESULTS) || 5,
   },
+  websiteGeneration: {
+    // Local-only generated site management.
+    templatesDir: process.env.WEBSITE_TEMPLATES_DIR || null, // resolved later from repo root
+    generatedDir: process.env.GENERATED_SITES_DIR || null, // resolved later from repo root
+    host: process.env.WEBSITE_HOST || '127.0.0.1',
+    basePort: parseInt(process.env.WEBSITE_BASE_PORT) || 4321,
+    maxPort: parseInt(process.env.WEBSITE_MAX_PORT) || 4330,
+    // Whether to actually run `npm install` (offline-friendly toggle).
+    runInstall: process.env.WEBSITE_RUN_INSTALL !== 'false',
+  },
 };
