@@ -260,4 +260,4 @@ class BusinessDataExtractor {
       .replace(/\s+/g, ' ')
       .trim();
     return text.substring(0, 15000);
-  }
+  }}
