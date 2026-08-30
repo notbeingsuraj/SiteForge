@@ -489,4 +489,54 @@ Rules:
       };
     }
   }
+
+  /**
+   * Validate and clean extracted profile
+   */
+  validateProfile(profile) {
+    if (!profile || typeof profile !== 'object') {
+      throw new Error('Invalid profile: not an object');
+    }
+
+    const validated = {
+      business: {
+        name: profile.business?.name ?? null,
+        category: profile.business?.category ?? null,
+        categories: Array.isArray(profile.business?.categories) ? profile.business.categories : [],
+        description: profile.business?.description ?? null,
+        business_type: profile.business?.business_type ?? null,
+      },
+      contact: {
+        phone: profile.contact?.phone ?? null,
+        email: profile.contact?.email ?? null,
+        website: profile.contact?.website ?? null,
+      },
+      location: {
+        full_address: profile.location?.full_address ?? null,
+        street: profile.location?.street ?? null,
+        city: profile.location?.city ?? null,
+        state: profile.location?.state ?? null,
+        country: profile.location?.country ?? null,
+        postal_code: profile.location?.postal_code ?? null,
+        latitude: profile.location?.latitude ?? null,
+        longitude: profile.location?.longitude ?? null,
+      },
+      ratings: {
+        rating: typeof profile.ratings?.rating === 'number' ? profile.ratings.rating : null,
+        review_count: typeof profile.ratings?.review_count === 'number' ? profile.ratings.review_count : null,
+      },
+      hours: profile.hours ?? {},
+      reviews: Array.isArray(profile.reviews) ? profile.reviews : [],
+      services: Array.isArray(profile.services) ? profile.services : [],
+      products: Array.isArray(profile.products) ? profile.products : [],
+      amenities: Array.isArray(profile.amenities) ? profile.amenities : [],
+      social_links: Array.isArray(profile.social_links) ? profile.social_links : [],
+      pricing: profile.pricing ?? null,
+      booking_url: profile.booking_url ?? null,
+      source_urls: Array.isArray(profile.source_urls) ? profile.source_urls : [],
+      confidence: profile.confidence ?? { overall: 0, name: 0, category: 0, phone: 0, website: 0, address: 0, rating: 0 },
+    };
+
+    return validated;
+  }
 }
