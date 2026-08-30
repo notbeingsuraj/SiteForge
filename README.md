@@ -43,6 +43,33 @@ PROBABILISTIC AI  +  DETERMINISTIC SOFTWARE  +  EXPLICIT CONTRACTS  =  RELIABLE 
 
 ---
 
+### `// WHERE BUSINESS DATA COMES FROM`
+
+Business evidence is layered from most- to least-trusted. Deterministic structured data always wins; AI only fills the gaps and never overwrites verified facts.
+
+```text
+LEVEL 1  INPUT HINTS        identified  (name / city / coords from the URL or user)
+LEVEL 2  GEOAPIFY PLACES    discovered  (phone, website, address, hours, category)
+LEVEL 3  WEB EXTRACTION     discovered  (fallback HTML extraction)
+LEVEL 4  AI ENRICHMENT      inferred    (fills only missing description/services)
+LEVEL 5  VALIDATION                    (schema + structure checks before use)
+```
+
+Every provider sits behind a single abstraction so the rest of SiteForge never learns provider details:
+
+```text
+ROUTE → BusinessResearchService → BusinessDataProvider
+                                      ├── GeoapifyProvider       (geocode → place-details)
+                                      ├── WebExtractionProvider  (HTML fallback)
+                                      └── GooglePlacesProvider   (future)
+```
+
+**Geoapify** is the structured evidence source: a name + coordinates search returns the place, then a `place-details` lookup enriches it with `contact.phone`, `website`, `opening_hours`, and hierarchical `categories`. If the key is missing, auth fails, the API is rate-limited, times out, or returns nothing usable, the pipeline silently falls back to web extraction and AI — a single business lookup never hard-fails because one provider hiccuped.
+
+> The Geoapify provider is backend-only. The API key lives in `apps/api/.env` (git-ignored) and is never exposed to the frontend or response payloads. Provider responses are mapped into SiteForge's canonical profile by `ProviderAdapter` and normalized/validated by `BusinessProfileValidator` before any downstream stage sees them.
+
+---
+
 ### `// AI OUTPUT IS UNTRUSTED INPUT`
 
 Every model response goes through the same gauntlet before it's allowed anywhere near a website:
@@ -86,6 +113,8 @@ SiteForge/
 
 Core services worth knowing: `BusinessDataExtractor`, `BrandDNAService`, `BrandStrategyService`, `WebsiteStrategyService`, `LandingPageSpecService` — each with its own input/output contract, validation, and test coverage.
 
+Business-data providers live under `apps/api/src/services/providers/`: `BusinessDataProvider` (abstraction), `GeoapifyProvider`, `WebExtractionProvider`, and `ProviderAdapter` — plus `BusinessProfileValidator` for the final normalized profile.
+
 ---
 
 ### `// RUN IT`
@@ -110,6 +139,8 @@ npm test        # pipeline + isolation + contract tests
 
 ```text
 Business extraction ........... ACTIVE
+Structured data (Geoapify) .... ACTIVE
+Provider fallback chain ....... ACTIVE
 Identity resolution ........... ACTIVE
 Isolation guarantees .......... VERIFIED
 Brand DNA / strategy layers ... ACTIVE

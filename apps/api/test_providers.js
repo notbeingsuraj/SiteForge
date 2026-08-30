@@ -182,8 +182,9 @@ check('parses split weekday/weekend hours "Mo-Fr 08:00-17:00, Sa-Su 09:00-14:00"
 check('normalizeHours tolerates day-map and array forms', () => {
   const mapForm = normalizeHours({ monday: '07:00-15:00', tuesday: '07:00-15:00' });
   assert.strictEqual(mapForm.monday, '07:00-15:00');
+  // Geoapify array form: day_of_week is 0-indexed (monday-first)
   const arrayForm = normalizeHours([{ day_of_week: 1, start_time: '08:00', end_time: '16:00' }]);
-  assert.strictEqual(arrayForm.monday, '08:00-16:00');
+  assert.strictEqual(arrayForm.tuesday, '08:00-16:00');
 });
 
 check('extractDeterministicHints builds query/coords from input', () => {
@@ -240,13 +241,16 @@ check('isAvailable reflects configured API key', () => {
   assert.strictEqual(GeoapifyProvider.isAvailable(), Boolean(config.geoapify?.apiKey));
 });
 
-check('search without key returns NOT_CONFIGURED', async () => {
+await checkAsync('search without key returns NOT_CONFIGURED', async () => {
   const originalKey = config.geoapify?.apiKey;
   config.geoapify.apiKey = null;
-  const result = await GeoapifyProvider.search({ name: 'X' });
-  config.geoapify.apiKey = originalKey;
-  assert.strictEqual(result.status, GEOAPIFY_STATUS.NOT_CONFIGURED);
-  assert.deepStrictEqual(result.records, []);
+  try {
+    const result = await GeoapifyProvider.search({ name: 'X' });
+    assert.strictEqual(result.status, GEOAPIFY_STATUS.NOT_CONFIGURED);
+    assert.deepStrictEqual(result.records, []);
+  } finally {
+    config.geoapify.apiKey = originalKey;
+  }
 });
 
 /* ================================================================== *
