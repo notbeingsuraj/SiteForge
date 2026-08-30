@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowRight, ExternalLink, Globe, Loader, MapPin, Play, Plus, RefreshCw, Square, Trash2,
+  ExternalLink, Globe, Loader, MapPin, Play, Plus, RefreshCw, Square, Trash2,
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -80,7 +80,7 @@ export default function GeneratedSites() {
   });
 
   const regenerateMutation = useMutation({
-    mutationFn: websiteService.regenerate,
+    mutationFn: (slug: string) => websiteService.regenerate(slug),
     onSuccess: (r) => {
       const w = r.website;
       setGenerated({ slug: w.slug, url: w.url ?? `http://localhost:${w.port}`, port: w.port ?? undefined });

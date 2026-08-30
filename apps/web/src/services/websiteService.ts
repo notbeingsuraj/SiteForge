@@ -22,6 +22,8 @@ export interface GenerateWebsiteResponse {
 
 export interface GeneratePayload {
   googleMapsUrl?: string;
+  /** Pre-analyzed business intelligence object (requires identity.name). */
+  business?: unknown;
   name?: string;
   city?: string;
   state?: string;
