@@ -124,10 +124,11 @@ router.post('/:slug/regenerate', async (req, res, next) => {
 
     if (googleMapsUrl) {
       // Fresh generation from URL — full pipeline
-      const result = await WebsiteGenerationService.generate(
-        await BusinessResearchService.extractBusinessIntelligenceWithProviders({ googleMapsUrl }).then(r => r.intelligence),
-        { build: options.build !== false, start: options.start !== false }
-      );
+      const extraction = await BusinessResearchService.extractBusinessIntelligenceWithProviders({ googleMapsUrl });
+      const result = await WebsiteGenerationService.generate(extraction.intelligence, {
+        build: options.build !== false,
+        start: options.start !== false,
+      });
       return res.json({ success: true, website: result });
     }
 

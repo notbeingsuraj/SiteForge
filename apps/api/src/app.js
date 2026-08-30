@@ -12,6 +12,7 @@ import leadsRoutes from './routes/leads.js';
 import brandStrategyRoutes from './routes/brandStrategy.js';
 import landingPageRoutes from './routes/landingPage.js';
 import digitalAuditRoutes from './routes/digitalAudit.js';
+import websiteRoutes from './routes/website.js';
 
 const app = express();
 
@@ -51,6 +52,7 @@ app.use('/api/leads', leadsRoutes);
 app.use('/api/brand-strategy', brandStrategyRoutes);
 app.use('/api/landing-page', landingPageRoutes);
 app.use('/api/digital-audit', digitalAuditRoutes);
+app.use('/api/website', websiteRoutes);
 
 // API info endpoint
 app.get('/api', (req, res) => {
