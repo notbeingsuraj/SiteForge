@@ -12,11 +12,16 @@ class AIService {
   constructor() {
     this.client = axios.create({
       baseURL: config.omniroute.baseUrl,
+      timeout: config.extraction.timeout,
       headers: {
         'Authorization': `Bearer ${config.omniroute.apiKey}`,
         'Content-Type': 'application/json',
       },
     });
+  }
+
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**
@@ -29,89 +34,97 @@ class AIService {
    * @param {number} options.maxTokens - Max tokens to generate
    */
   async generate({ prompt, model = 'fast', schema = null, temperature = 0.7, maxTokens = 4000, systemPrompt = null }) {
-    try {
-      if (!config.omniroute.apiKey) throw new Error('Missing OMNIROUTE_API_KEY');
-      
-      const messages = [];
-      
-      // Add system prompt if provided (especially important for reasoning models)
-      if (systemPrompt) {
-        messages.push({ role: 'system', content: systemPrompt });
-      }
-      
-      messages.push({
-        role: 'user',
-        content: prompt,
-      });
+    if (!config.omniroute.apiKey) throw new Error('Missing OMNIROUTE_API_KEY');
 
-      const payload = {
-        model: this.selectModel(model),
-        messages,
-        temperature,
-        max_tokens: maxTokens,
-        stream: false,
-      };
-
-      // If schema is provided, request structured JSON output with schema enforcement
-      if (schema) {
-        // Check if it's a full JSON schema object or just true
-        if (typeof schema === 'object' && schema !== null && schema.type === 'object') {
-          // Full JSON schema provided - use strict structured output
-          payload.response_format = {
-            type: 'json_schema',
-            json_schema: {
-              name: 'LandingPageSpec',
-              strict: true,
-              schema: schema
-            }
-          };
-        } else {
-          // Just requesting JSON object without strict schema
-          payload.response_format = { type: 'json_object' };
-        }
-      }
-
-      const selectedModel = payload.model;
-      if (config.debugBusinessAnalysis) {
-        console.log('[AI] Provider: OmniRoute');
-        console.log('[AI] Model:', selectedModel);
-        console.log('[AI] Prompt Data Size:', prompt.length);
-      }
-      const response = await this.client.post('/chat/completions', payload);
-      const message = response.data?.choices?.[0]?.message;
-      let content = message?.content;
-
-      // Fallback: some reasoning models put output in reasoning_content
-      // when response_format is json_object or max_tokens is tight.
-      if ((!content || !content.trim()) && message?.reasoning_content) {
-        // Try to extract JSON from the reasoning_content if present
-        const reasoning = message.reasoning_content;
-        const jsonMatch = reasoning.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          content = jsonMatch[0];
-        }
-      }
-
-      if (typeof content !== 'string' || !content.trim()) {
-        throw new Error('AI provider returned an empty response');
-      }
-
-      // Parse JSON if schema was requested
-      if (schema) {
-        try {
-          return JSON.parse(content);
-        } catch (e) {
-          throw new Error('AI returned invalid JSON');
-        }
-      }
-
-      if (config.debugBusinessAnalysis) console.log('[AI] Response Received:', content.length, 'characters');
-
-      return content;
-    } catch (error) {
-      const detail = error.response?.data?.error?.message || error.message;
-      throw new Error(`AI generation failed: ${detail}`);
+    const messages = [];
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt });
     }
+    messages.push({ role: 'user', content: prompt });
+
+    const payload = {
+      model: this.selectModel(model),
+      messages,
+      temperature,
+      max_tokens: maxTokens,
+      stream: false,
+    };
+
+    if (schema) {
+      if (typeof schema === 'object' && schema !== null && schema.type === 'object') {
+        payload.response_format = {
+          type: 'json_schema',
+          json_schema: {
+            name: 'LandingPageSpec',
+            strict: true,
+            schema,
+          }
+        };
+      } else {
+        payload.response_format = { type: 'json_object' };
+      }
+    }
+
+    const selectedModel = payload.model;
+    if (config.debugBusinessAnalysis) {
+      console.log('[AI] Provider: OmniRoute');
+      console.log('[AI] Model:', selectedModel);
+      console.log('[AI] Prompt Data Size:', prompt.length);
+    }
+
+    const maxAttempts = Math.max(1, Number(config.extraction.maxRetries || 2) + 1);
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const response = await this.client.post('/chat/completions', payload);
+        const message = response.data?.choices?.[0]?.message;
+        let content = message?.content;
+
+        if ((!content || !content.trim()) && message?.reasoning_content) {
+          const reasoning = message.reasoning_content;
+          const jsonMatch = reasoning.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            content = jsonMatch[0];
+          }
+        }
+
+        if (typeof content !== 'string' || !content.trim()) {
+          throw new Error('AI provider returned an empty response');
+        }
+
+        if (schema) {
+          try {
+            return JSON.parse(content);
+          } catch (e) {
+            throw new Error('AI returned invalid JSON');
+          }
+        }
+
+        if (config.debugBusinessAnalysis) console.log('[AI] Response Received:', content.length, 'characters');
+        return content;
+      } catch (error) {
+        lastError = error;
+        const status = error.response?.status;
+        const bodyMessage = error.response?.data?.error?.message || error.response?.data?.message || error.message;
+        const isRateLimit = status === 429 || /rate[_ -]?limit|429/i.test(String(bodyMessage));
+
+        if (isRateLimit && attempt < maxAttempts) {
+          const delayMs = 500 * Math.pow(2, attempt - 1);
+          await this.sleep(delayMs);
+          continue;
+        }
+
+        if (isRateLimit) {
+          throw new Error(`AI provider rate-limited after ${attempt} attempts.`);
+        }
+
+        const detail = bodyMessage || error.message;
+        throw new Error(`AI generation failed: ${detail}`);
+      }
+    }
+
+    throw new Error(`AI generation failed: ${lastError?.message || 'unknown error'}`);
   }
 
   /**

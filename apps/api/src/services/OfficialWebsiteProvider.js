@@ -232,7 +232,7 @@ class OfficialWebsiteProvider {
       contact: {
         phone: null,
         email: null,
-        website: sourceUrl,
+        website: null,
       },
       location: {
         full_address: null,
@@ -253,11 +253,21 @@ class OfficialWebsiteProvider {
       },
     };
 
+    const evidenceWebsiteUrls = new Set();
+    if (metadata.openGraph?.url) evidenceWebsiteUrls.add(metadata.openGraph.url);
+    if (metadata.openGraph?.site) evidenceWebsiteUrls.add(metadata.openGraph.site);
+    if (metadata.openGraph?.['site_name']) evidenceWebsiteUrls.add(metadata.openGraph['site_name']);
+
     // Extract from JSON-LD (highest priority)
     for (const jsonLd of metadata.jsonLd) {
       // Handle @graph
       const items = jsonLd['@graph'] || [jsonLd];
       for (const item of items) {
+        if (item.url) evidenceWebsiteUrls.add(item.url);
+        if (item.sameAs && Array.isArray(item.sameAs)) {
+          item.sameAs.forEach(url => evidenceWebsiteUrls.add(url));
+        }
+
         const types = Array.isArray(item['@type']) ? item['@type'] : [item['@type']];
         const isOrg = types.includes('Organization') || types.includes('LocalBusiness') || 
                       types.includes('Restaurant') || types.includes('Store') || 
