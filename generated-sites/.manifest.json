@@ -1,9 +1,0 @@
-{
-  "tartine-bakery": {
-    "port": 4321,
-    "url": "http://localhost:4321",
-    "status": "running",
-    "pid": 48220,
-    "startedAt": "2026-08-30T18:11:58.178Z"
-  }
-}
