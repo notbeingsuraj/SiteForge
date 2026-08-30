@@ -78,19 +78,40 @@ router.post('/analyze', async (req, res, next) => {
       });
     }
 
+    // Brand-DNA generation is optional additive enrichment. Extraction has
+    // already succeeded (business is valid). If the AI brand-DNA step fails
+    // (e.g. transient upstream 500), we must NOT discard the successful
+    // extraction or return HTTP 500. We surface an explicit failure state
+    // instead, while keeping the valid business profile. Real extraction
+    // errors are NOT swallowed here — they throw earlier, in
+    // extractBusinessIntelligenceWithProviders, and follow the normal
+    // errorHandler path.
     const { default: BrandStrategyService } = await import('../services/BrandStrategyService.js');
-    const businessDNA = await BrandStrategyService.generateBrandDNA(business);
+    let businessDNA = null;
+    let brandStrategyStatus = 'not_attempted';
+    try {
+      businessDNA = await BrandStrategyService.generateBrandDNA(business);
+      brandStrategyStatus = 'ok';
+    } catch (brandError) {
+      // Optional enrichment failed — log server-side (safe/redacted), do not 500.
+      const safeMsg = brandError?.safeMessage || brandError?.message || 'unknown';
+      console.error('[business/analyze] Brand DNA generation failed (non-fatal, extraction preserved):', safeMsg);
+      brandStrategyStatus = 'failed';
+      businessDNA = null;
+    }
 
     res.json({
       success: true,
       business,
       businessDNA,
+      brandStrategy: { status: brandStrategyStatus },
       metadata: {
         source: 'geoapify_and_web_extraction',
         providers: result.provider,
         confidence: business.confidence?.overall || 0,
         extractedAt: new Date().toISOString(),
         cached: false,
+        brandDNAStatus: brandStrategyStatus,
         validationIssues: result.validation?.issues?.length ? result.validation.issues.map((i) => i.field) : [],
       },
     });
