@@ -1,0 +1,22 @@
+---
+// Contact — shows verified phone/email/website as actionable links, only for
+// channels that actually exist. Never invents contact info.
+import { siteConfig, telHref } from '../lib/site';
+
+const b = siteConfig.business;
+const phoneHref = telHref(b.phone);
+const hasAny = b.phone || b.email || b.website;
+---
+
+{hasAny && (
+  <section id="contact" class="section" style="scroll-margin-top:4rem">
+    <div class="container">
+      <h2 class="section__title">Contact</h2>
+      <ul class="info-list">
+        {b.phone && phoneHref && <li><span class="info-icon">📞</span><a href={phoneHref}>{b.phone}</a></li>}
+        {b.email && <li><span class="info-icon">✉️</span><a href={`mailto:${b.email}`}>{b.email}</a></li>}
+        {b.website && <li><span class="info-icon">🔗</span><a href={b.website} target="_blank" rel="noopener">{b.website.replace(/^https?:\/\//, '')}</a></li>}
+      </ul>
+    </div>
+  </section>
+)}

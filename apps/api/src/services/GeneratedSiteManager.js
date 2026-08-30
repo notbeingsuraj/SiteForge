@@ -23,8 +23,8 @@ import { fileURLToPath } from 'node:url';
 import { config } from '../config/env.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// apps/api/src/services -> repo root (3 levels up)
-const REPO_ROOT = path.resolve(__dirname, '../../..');
+// apps/api/src/services -> repo root (4 levels up: services → src → api → apps → root)
+const REPO_ROOT = path.resolve(__dirname, '../../../../');
 
 class GeneratedSiteManager {
   constructor() {
@@ -110,6 +110,8 @@ class GeneratedSiteManager {
     const entries = await fsp.readdir(src, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.astro') continue;
+      // Skip lockfiles — generated sites get a clean install for their own dir.
+      if (entry.name === 'package-lock.json' || entry.name === 'npm-shrinkwrap.json') continue;
       const s = path.join(src, entry.name);
       const d = path.join(dest, entry.name);
       if (entry.isDirectory()) {

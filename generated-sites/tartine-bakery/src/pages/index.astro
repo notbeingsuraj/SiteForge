@@ -1,0 +1,64 @@
+---
+// SiteForge generated site — single-page landing renderer (SSG).
+// Deterministic: renders the verified site.config.json. Sections are included
+// only when the generator decided they have enough data; components further
+// omit sub-parts when individual facts are missing (never fabricated).
+import { siteConfig, themeCss, hasSection } from '../lib/site';
+import '../styles/global.css';
+
+import Hero from '../components/Hero.astro';
+import About from '../components/About.astro';
+import Services from '../components/Services.astro';
+import Hours from '../components/Hours.astro';
+import Location from '../components/Location.astro';
+import Contact from '../components/Contact.astro';
+import Cta from '../components/Cta.astro';
+import Faq from '../components/Faq.astro';
+import Footer from '../components/Footer.astro';
+
+const meta = `:root {\n${themeCss()}\n}`;
+const title = siteConfig.site.title || siteConfig.business.name || 'Business';
+const desc = siteConfig.site.description || '';
+---
+
+<!doctype html>
+<html lang={siteConfig.site.lang || 'en'}>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{title}</title>
+  <meta name="description" content={desc} />
+  <meta name="generator" content="SiteForge" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='white' font-family='system-ui' font-weight='bold'%3ES%3C/text%3E%3C/svg%3E" />
+  <style is:inline>{meta}</style>
+</head>
+<body>
+  <header class="nav">
+    <div class="container nav__inner">
+      <a class="nav__brand" href="#">{siteConfig.business.name}</a>
+      <nav class="nav__links" aria-label="Primary">
+        {hasSection('about') && <a href="#about">About</a>}
+        {hasSection('services') && <a href="#services">Services</a>}
+        {hasSection('hours') && <a href="#hours">Hours</a>}
+        {hasSection('location') && <a href="#location">Location</a>}
+        {hasSection('contact') && <a href="#contact">Contact</a>}
+      </nav>
+    </div>
+  </header>
+
+  {hasSection('hero') && <Hero />}
+
+  <main>
+    {hasSection('about') && <About />}
+    {hasSection('services') && <Services />}
+    {hasSection('hours') && <Hours />}
+    {hasSection('location') && <Location />}
+    {hasSection('faq') && <Faq />}
+    {hasSection('contact') && <Contact />}
+  </main>
+
+  {hasSection('cta') && <Cta />}
+
+  <Footer />
+</body>
+</html>

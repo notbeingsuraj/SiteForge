@@ -1,0 +1,25 @@
+---
+// About — business introduction, strictly from verified description/differentiators.
+import { siteConfig } from '../lib/site';
+
+const b = siteConfig.business;
+const about = siteConfig.copy.about;
+const intro = about?.story || b.description;
+const differentiators = about?.differentiators || [];
+---
+
+<section id="about" class="section" style="scroll-margin-top:4rem">
+  <div class="container">
+    <h2 class="section__title">{about?.heading || 'About'}</h2>
+    {intro && <p class="section__lead">{intro}</p>}
+    {differentiators.length > 0 && (
+      <div class="grid grid--3">
+        {differentiators.map((d) => (
+          <div class="card" key={d}>
+            <p class="card__text">{d}</p>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+</section>

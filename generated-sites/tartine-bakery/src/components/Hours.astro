@@ -1,0 +1,43 @@
+---
+// Hours — renders verified opening hours only. If hours are unavailable the
+// generator omits this section entirely, so a broken/empty hours block is
+// never rendered.
+import { siteConfig } from '../lib/site';
+
+const b = siteConfig.business;
+const hours = b.hoursText || null;
+const hoursMap = b.hours && typeof b.hours === 'object' ? b.hours : null;
+
+const dayNames = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+function fmt(v: unknown): string {
+  if (Array.isArray(v)) return v.join(', ');
+  if (typeof v === 'object' && v) return JSON.stringify(v);
+  return String(v);
+}
+---
+
+{(hoursMap || hours) && (
+  <section id="hours" class="section" style="scroll-margin-top:4rem">
+    <div class="container">
+      <h2 class="section__title">Hours</h2>
+      <div class="hours">
+        {hoursMap ? (
+          dayNames.map((d) => {
+            const val = hoursMap[d.toLowerCase()] ?? hoursMap[d] ?? null;
+            return val ? (
+              <div class="hours__row" key={d}>
+                <span class="hours__day">{d.charAt(0).toUpperCase() + d.slice(1)}</span>
+                <span class="hours__time">{fmt(val)}</span>
+              </div>
+            ) : null;
+          })
+        ) : (
+          <div class="hours__row">
+            <span class="hours__day">Hours</span>
+            <span class="hours__time">{hours}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  </section>
+)}
