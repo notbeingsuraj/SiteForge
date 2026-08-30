@@ -1,0 +1,58 @@
+{
+  "site": {
+    "slug": "example-business",
+    "title": "Example Business",
+    "description": "A place for verified business information.",
+    "lang": "en",
+    "style": "default"
+  },
+  "business": {
+    "name": "Example Business",
+    "category": null,
+    "categories": [],
+    "description": null,
+    "phone": null,
+    "email": null,
+    "website": null,
+    "address": null,
+    "city": null,
+    "state": null,
+    "country": null,
+    "postalCode": null,
+    "latitude": null,
+    "longitude": null,
+    "hours": null,
+    "hoursText": null,
+    "rating": null,
+    "reviewCount": null
+  },
+  "facts": [],
+  "copy": {
+    "hero": { "headline": null, "subheadline": null, "cta": null, "secondaryCta": null },
+    "services": { "heading": null, "items": [] },
+    "about": { "heading": null, "story": null, "differentiators": [] },
+    "faq": []
+  },
+  "sections": [],
+  "theme": {
+    "style": "default",
+    "colorPalette": {
+      "primary": "#2563eb",
+      "secondary": "#7c3aed",
+      "accent": "#f59e0b",
+      "background": "#ffffff",
+      "surface": "#f8fafc",
+      "text": "#0f172a",
+      "muted": "#64748b"
+    },
+    "typography": {
+      "headingFont": "Georgia, 'Times New Roman', serif",
+      "bodyFont": "system-ui, -apple-system, 'Segoe UI', sans-serif"
+    },
+    "borderRadius": "12px"
+  },
+  "primaryCta": { "text": "Get in touch", "action": "contact", "href": null },
+  "secondaryCta": null,
+  "provenance": {},
+  "generatedAt": null
+}

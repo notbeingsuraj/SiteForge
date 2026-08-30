@@ -1,0 +1,20 @@
+---
+// Cta — final conversion band. Only renders a button when there is a real
+// actionable channel derived from verified facts.
+import { siteConfig, ctaHref } from '../lib/site';
+
+const primary = siteConfig.primaryCta;
+const href = primary.href || ctaHref(primary.action) || ctaHref('contact');
+---
+
+{#if href && primary.text}
+<section class="section">
+  <div class="container">
+    <div class="cta-band">
+      <h2>{siteConfig.business.name || 'Get in touch'}</h2>
+      <p>{siteConfig.copy.hero?.subheadline || 'Reach out today to learn more.'}</p>
+      <a class="btn btn--accent" href={href}>{primary.text}</a>
+    </div>
+  </div>
+</section>
+{/if}
