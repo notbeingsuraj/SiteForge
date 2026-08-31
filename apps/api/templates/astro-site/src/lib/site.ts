@@ -1,7 +1,7 @@
-// SiteForge generated-site config library.
+// SiteForge generated-site config library (V2).
 // The SiteForge WebsiteGenerationService writes src/data/site.config.json
-// from a verified BusinessProfile. This module reads it and exposes typed
-// helpers that the deterministic Astro components use to render.
+// from a verified BusinessProfile + Design Intelligence. This module reads it 
+// and exposes typed helpers that the deterministic Astro components use to render.
 
 // Astro supports JSON imports natively.
 import rawConfig from '../data/site.config.json';
@@ -27,6 +27,43 @@ export interface BusinessFacts {
   reviewCount: number | null;
 }
 
+export interface DesignTokens {
+  motion?: {
+    intensity: 'none' | 'subtle' | 'moderate' | 'expressive';
+    allowedEffects: string[];
+  };
+  imageTreatment?: {
+    aspectRatios: string[];
+    overlayStyle: 'none' | 'gradient' | 'tint' | 'vignette' | 'duotone';
+    borderTreatment: 'none' | 'rounded' | 'sharp' | 'organic' | 'film';
+    shadowStyle: 'none' | 'subtle' | 'elevated' | 'dramatic' | 'inner';
+  };
+  iconTreatment?: {
+    style: 'outline' | 'filled' | 'duotone' | 'hand-drawn' | 'minimal';
+    weight: string;
+    size: string;
+  };
+  layout?: {
+    maxWidth: string;
+    sectionSpacing: string;
+    grid: string;
+    heroComposition: 'centered' | 'split-left' | 'split-right' | 'full-bleed' | 'asymmetric';
+  };
+  weightScale?: {
+    light: number;
+    regular: number;
+    medium: number;
+    semibold: number;
+    bold: number;
+  };
+  letterSpacing?: {
+    tight: string;
+    normal: string;
+    wide: string;
+  };
+  shadowStyle?: string;
+}
+
 export interface Theme {
   style: string;
   colorPalette: {
@@ -43,6 +80,34 @@ export interface Theme {
     bodyFont: string;
   };
   borderRadius: string;
+  designTokens?: DesignTokens;
+}
+
+export interface AssetInfo {
+  id: string;
+  path: string;
+  width: number;
+  height: number;
+  format: string;
+  size: number;
+  aspectRatio: string;
+  treatment?: Record<string, unknown>;
+  derivatives?: {
+    webp?: string;
+    avif?: string;
+    sizes?: string[];
+  };
+}
+
+export interface DesignIntelligenceMeta {
+  layoutFamily?: string;
+  visualDirection?: string;
+  assetPlan?: {
+    hero?: { type: string; subject: string; aspectRatio: string; resolution: string };
+    supporting?: Array<{ id: string; purpose: string; subject: string; aspectRatio: string; resolution: string }>;
+    gallery?: { count: number; style: string; layout: string };
+    optimization?: { formats: string[]; sizes: string[]; loading: Record<string, unknown> };
+  };
 }
 
 export interface SiteConfig {
@@ -60,6 +125,12 @@ export interface SiteConfig {
     services: { heading: string | null; items: Array<{ name: string; headline?: string; description: string; benefits?: string[] }> };
     about: { heading: string | null; story: string | null; differentiators: string[] };
     faq: Array<{ question: string; answer: string }>;
+    trust?: Array<{ claim: string; verified: boolean; icon?: string }>;
+    statistics?: Array<{ label: string; value: string }>;
+    location?: { address: string; mapEmbed?: string };
+    hours?: Record<string, string>;
+    contact?: { phone?: string; email?: string; website?: string };
+    cta?: { headline: string; subheadline: string; ctaText: string };
   };
   sections: string[];
   theme: Theme;
@@ -67,6 +138,12 @@ export interface SiteConfig {
   secondaryCta: { text: string; href: string | null } | null;
   provenance: Record<string, string>;
   generatedAt: string | null;
+  designIntelligence?: DesignIntelligenceMeta;
+  assets?: {
+    hero?: AssetInfo;
+    supporting?: AssetInfo[];
+    gallery?: AssetInfo[];
+  };
 }
 
 export const siteConfig = rawConfig as unknown as SiteConfig;
