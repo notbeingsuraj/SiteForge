@@ -368,7 +368,10 @@ class DesignIntelligenceService {
     };
     
     // Match category to color system
-    if (cat.includes(key)) return colors;
+    for (const [key, colors] of Object.entries(colorSystems)) {
+      if (cat.includes(key)) return colors;
+    }
+    return colorSystems.default;
   }
 
   /**
@@ -985,8 +988,7 @@ class DesignIntelligenceService {
     // Gallery
     let galleryCount = 0;
     const visualCategories = ['bakery', 'cafe', 'restaurant', 'hotel', 'spa', 'retail', 'photography', 'studio', 'creative', 'design', 'fashion', 'gym', 'fitness'];
-    const cat = category?.toLowerCase() || '';
-    if (visualCategories.some(v => cat.includes(v))) {
+    if (visualCategories.some(v => category?.toLowerCase().includes(v))) {
       galleryCount = 6;
     }
     
@@ -1011,6 +1013,8 @@ class DesignIntelligenceService {
       },
     };
   }
+
+  validateIntelligence(intelligence) {
     const required = [
       'designSystem', 
       'pageArchitecture', 
