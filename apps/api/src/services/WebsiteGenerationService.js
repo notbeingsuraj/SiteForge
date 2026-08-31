@@ -190,7 +190,7 @@ class WebsiteGenerationService {
 
     // Theme: use AI-generated design system or deterministic fallback
     const theme = designIntelligence?.designSystem 
-      ? this.convertDesignSystemToTheme(designIntelligence.designSystem)
+      ? this.convertDesignSystemToTheme(designIntelligence.designSystem, facts)
       : this.resolveTheme(facts, null);
 
     // Sections: use AI-generated page architecture or deterministic fallback
@@ -216,9 +216,6 @@ class WebsiteGenerationService {
           href: designIntelligence.contentStrategy.hero.secondaryCta?.action
         }
       : this.resolveSecondaryCta(facts, null, null);
-
-    // Convert design system to theme format
-    const theme = this.convertDesignSystemToTheme(designIntelligence?.designSystem, facts);
 
     const config = {
       site: {
@@ -565,6 +562,11 @@ class WebsiteGenerationService {
     if (facts.phone && facts.website) return { text: 'Visit website', href: facts.website };
     return null;
   }
+
+  /**
+   * List generated sites (from manifest) for the UI.
+   */
+  async list() {
     const manifest = await GeneratedSiteManager.readManifest();
     const entries = Object.entries(manifest).map(([slug, m]) => ({
       slug,
