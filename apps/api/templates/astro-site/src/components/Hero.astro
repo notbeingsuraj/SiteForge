@@ -1,7 +1,7 @@
 ---
-// Hero — value proposition + primary CTA. Renders only verified business facts.
-// CTA hrefs resolve to available channels (phone/website/directions); missing
-// channels are omitted rather than fabricated.
+// Hero V2 — value proposition + primary CTA + hero asset.
+// Supports multiple hero compositions from design intelligence.
+// Renders only verified business facts; CTA hrefs resolve to available channels.
 import { siteConfig, ctaHref } from '../lib/site';
 
 const b = siteConfig.business;
@@ -13,10 +13,34 @@ const secondaryHref = siteConfig.secondaryCta?.href || null;
 
 const safeHeadline = copy?.headline || b.name || 'Welcome';
 const safeSub = copy?.subheadline || (b.description ? b.description : null);
+
+// V2: Hero composition from design intelligence
+const heroComposition = siteConfig.theme.designTokens?.layout?.heroComposition || 'centered';
+const heroAsset = siteConfig.assets?.hero;
+
+// Determine hero layout class
+const heroLayoutClass = `hero hero--${heroComposition}`;
+
 ---
 
-<section class="hero">
-  <div class="container">
+<section class={heroLayoutClass}>
+  <!-- Hero background asset -->
+  {heroAsset && (
+    <div class="hero__background">
+      <img 
+        src={heroAsset.path} 
+        alt="" 
+        aria-hidden="true"
+        loading="eager"
+        fetchpriority="high"
+      />
+      {siteConfig.theme.designTokens?.imageTreatment?.overlayStyle !== 'none' && (
+        <div class="hero__overlay" style={heroOverlayStyle()} />
+      )}
+    </div>
+  )}
+
+  <div class="container hero__content">
     {category && <span class="hero__eyebrow">{category}</span>}
     <h1 class="hero__title">{safeHeadline}</h1>
     {safeSub && <p class="hero__sub">{safeSub}</p>}
@@ -26,3 +50,34 @@ const safeSub = copy?.subheadline || (b.description ? b.description : null);
     </div>
   </div>
 </section>
+
+<script>
+  function heroOverlayStyle() {
+    const treatment = Astro.siteConfig?.theme?.designTokens?.imageTreatment;
+    if (!treatment || treatment.overlayStyle === 'none') return {};
+    
+    const colors = Astro.siteConfig?.theme?.colorPalette;
+    if (!colors) return {};
+    
+    switch (treatment.overlayStyle) {
+      case 'gradient':
+        return {
+          background: `linear-gradient(135deg, ${colors.primary}22, ${colors.accent}11, transparent)`
+        };
+      case 'tint':
+        return {
+          background: `${colors.primary}15`
+        };
+      case 'vignette':
+        return {
+          background: `radial-gradient(ellipse at center, transparent 50%, ${colors.background}CC 100%)`
+        };
+      case 'duotone':
+        return {
+          background: `linear-gradient(45deg, ${colors.primary}33, ${colors.secondary}22)`
+        };
+      default:
+        return {};
+    }
+  }
+</script>

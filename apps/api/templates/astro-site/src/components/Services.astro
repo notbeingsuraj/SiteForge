@@ -1,33 +1,96 @@
 ---
-// Services — from verified services/category list + generated copy. Never invented.
+// Services V2 — Business-specific services with rich content, layout variations, and asset integration.
+// Supports multiple layout modes from design intelligence.
 import { siteConfig } from '../lib/site';
 
 const b = siteConfig.business;
 const svc = siteConfig.copy.services;
-// Prefer generated service items; fall back to verified category names.
-const items = (svc?.items && svc.items.length ? svc.items : [])
-  .concat((b.categories || []).filter((c) => c && !(svc?.items || []).some((i) => (i.name || '').toLowerCase() === c.toLowerCase())).map((c) => ({ name: c, description: '' })));
+const designTokens = siteConfig.theme.designTokens || {};
+
+// Get service items from AI-generated copy or fallback
+const items = (siteConfig.copy.services?.items && siteConfig.copy.services.items.length ? siteConfig.copy.services.items : [])
+  .concat((b.categories || []).filter((c) => c && !(siteConfig.copy.services?.items || []).some((i) => (i.name || '').toLowerCase() === c.toLowerCase())).map((c) => ({ name: c, description: '' })));
+
+// V2: Get service assets if available
+const serviceAssets = siteConfig.assets?.supporting || [];
+const layout = siteConfig.theme.designTokens?.layout?.grid || 'grid--3';
+const cardShape = siteConfig.theme.designTokens?.shapeLanguage?.cardShape || 'rounded';
+const shadowStyle = siteConfig.theme.designTokens?.imageTreatment?.shadowStyle || 'subtle';
+
+// Match service assets to service items
+function getServiceAsset(index) {
+  return serviceAssets[index] || null;
+}
+
+function getCardClass() {
+  const shape = `card--${siteConfig.theme.designTokens?.shapeLanguage?.cardShape || 'rounded'}`;
+  const shadow = `card--shadow-${siteConfig.theme.designTokens?.imageTreatment?.shadowStyle || 'subtle'}`;
+  return `card ${shape} ${shadow}`;
+}
+
 ---
 
 <section id="services" class="section section--surface" style="scroll-margin-top:4rem">
   <div class="container">
     <h2 class="section__title">{svc?.heading || 'Services'}</h2>
+    
     {items.length > 0 ? (
-      <div class="grid grid--3">
-        {items.map((item, i) => (
-          <div class="card" key={item.name || i}>
-            <h3 class="card__title">{item.name}</h3>
-            {item.description && <p class="card__text">{item.description}</p>}
-            {item.benefits && item.benefits.length > 0 && (
-              <ul class="muted-note">
-                {item.benefits.map((f) => <li key={f}>{f}</li>)}
-              </ul>
-            )}
-          </div>
-        ))}
+      <div class={`grid ${layout}`}>
+        {items.map((item, i) => {
+          const asset = getServiceAsset(i);
+          return (
+            <article class={getCardClass()} key={item.name || i}>
+              {asset && (
+                <div class="card__media">
+                  <img 
+                    src={asset.path} 
+                    alt={asset.treatment?.alt || ''}
+                    loading="lazy"
+                  />
+                  {siteConfig.theme.designTokens?.imageTreatment?.overlayStyle !== 'none' && (
+                    <div class="card__media-overlay" style={cardOverlayStyle()} />
+                  )}
+                </div>
+              )}
+              <div class="card__content">
+                <h3 class="card__title">{item.name}</h3>
+                {item.headline && <h4 class="card__headline">{item.headline}</h4>}
+                {item.description && <p class="card__text">{item.description}</p>}
+                {item.benefits && item.benefits.length > 0 && (
+                  <ul class="card__benefits">
+                    {item.benefits.map((f) => <li key={f}>{f}</li>)}
+                  </ul>
+                )}
+              </div>
+            </article>
+          );
+        })}
       </div>
     ) : (
       <p class="section__lead">{b.name || 'This business'} has not shared additional services.</p>
     )}
   </div>
 </section>
+
+<script>
+  function cardOverlayStyle() {
+    const treatment = Astro.siteConfig?.theme?.designTokens?.imageTreatment;
+    if (!treatment || treatment.overlayStyle === 'none') return {};
+    
+    const colors = Astro.siteConfig?.theme?.colorPalette;
+    if (!colors) return {};
+    
+    switch (treatment.overlayStyle) {
+      case 'gradient':
+        return { background: `linear-gradient(180deg, transparent 50%, ${colors.primary}22)` };
+      case 'tint':
+        return { background: `${colors.primary}15` };
+      case 'vignette':
+        return { background: `radial-gradient(ellipse at center, transparent 50%, ${colors.background || '#fff'}CC 100%)` };
+      case 'duotone':
+        return { background: `linear-gradient(45deg, ${colors.primary}33, ${colors.secondary}22)` };
+      default:
+        return {};
+    }
+  }
+</script>

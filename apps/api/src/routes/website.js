@@ -111,28 +111,59 @@ router.post('/:slug/stop', async (req, res, next) => {
 
 /**
  * POST /api/website/:slug/regenerate
- * Regenerate a site (pulls fresh business data if URL provided, or rebuilds from
- * stored config). For v1: rebuild + restart using stored config if no URL.
+ * Regenerate a site with controlled modes.
+ * Modes: 'content' | 'design' | 'assets' | 'all' (default)
  */
 router.post('/:slug/regenerate', async (req, res, next) => {
   try {
     const { slug } = req.params;
-    const { googleMapsUrl, options = {} } = req.body;
+    const { 
+      googleMapsUrl, 
+      options = {}, 
+      regenerateMode = 'all' 
+    } = req.body;
 
     // Stop if running
     await GeneratedSiteManager.stop(slug);
 
     if (googleMapsUrl) {
       // Fresh generation from URL — full pipeline
-      const extraction = await BusinessResearchService.extractBusinessIntelligenceWithProviders({ googleMapsUrl });
+      const extraction = await BusinessResearchService.extractBusinessIntelligenceWithProviders({ 
+        googleMapsUrl,
+        name: req.body.name,
+        city: req.body.city,
+        state: req.body.state,
+        country: req.body.country,
+        latitude: req.body.latitude,
+        longitude: req.body.longitude,
+      });
       const result = await WebsiteGenerationService.generate(extraction.intelligence, {
         build: options.build !== false,
         start: options.start !== false,
+        regenerateMode: regenerateMode,
       });
       return res.json({ success: true, website: result });
     }
 
-    // Rebuild from stored config: install + build + start
+    // Regenerate from stored config with mode control
+    const modeOptions = {
+      build: options.build !== false,
+      start: options.start !== false,
+      regenerateMode,
+      skipAIDesign: regenerateMode === 'content', // Preserve design
+    };
+
+    if (regenerateMode === 'design' || regenerateMode === 'all') {
+      modeOptions.skipAIDesign = false;
+    }
+    if (regenerateMode === 'content') {
+      modeOptions.skipAIDesign = true;
+    }
+    if (regenerateMode === 'assets') {
+      modeOptions.skipAIDesign = true;
+      // Assets only - would need asset generation service integration
+    }
+
     await GeneratedSiteManager.runInstall(slug);
     await GeneratedSiteManager.runBuild(slug);
     const port = await GeneratedSiteManager.allocatePort(slug);

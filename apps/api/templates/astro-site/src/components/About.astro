@@ -1,25 +1,103 @@
 ---
-// About — business introduction, strictly from verified description/differentiators.
+// About V2 — Rich business story with layout variations, differentiators, and asset integration.
 import { siteConfig } from '../lib/site';
 
 const b = siteConfig.business;
 const about = siteConfig.copy.about;
-const intro = about?.story || b.description;
-const differentiators = about?.differentiators || [];
+const designTokens = siteConfig.theme.designTokens || {};
+
+// V2: Get about asset if available
+const aboutAsset = siteConfig.assets?.supporting?.find(a => a.id.includes('about')) || 
+                   siteConfig.assets?.supporting?.[0];
+
+const story = about?.story || siteConfig.copy.about?.story || b.description;
+const differentiators = about?.differentiators || siteConfig.copy.about?.differentiators || [];
+const heading = about?.heading || 'About';
+
+const layout = siteConfig.theme.designTokens?.layout?.grid || 'grid--3';
+
 ---
 
 <section id="about" class="section" style="scroll-margin-top:4rem">
   <div class="container">
     <h2 class="section__title">{about?.heading || 'About'}</h2>
-    {intro && <p class="section__lead">{intro}</p>}
-    {differentiators.length > 0 && (
-      <div class="grid grid--3">
-        {differentiators.map((d) => (
-          <div class="card" key={d}>
-            <p class="card__text">{d}</p>
-          </div>
-        ))}
+    
+    <div class="about__content">
+      {story && <p class="section__lead about__story">{story}</p>}
+      
+      {differentiators.length > 0 && (
+        <div class="grid grid--3">
+          {differentiators.map((d, i) => (
+            <article class="card card--differentiator" key={d}>
+              {siteConfig.theme.designTokens?.iconTreatment && (
+                <div class="differentiator__icon">
+                  <!-- Icon would be rendered here based on iconTreatment style -->
+                  <span class="icon-placeholder" data-icon-index={i}>✦</span>
+                </div>
+              )}
+              <p class="card__text">{d}</p>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+    
+    {/* About asset integration */}
+    {siteConfig.assets?.supporting?.find(a => a.id.includes('about')) && (
+      <div class="about__media">
+        <img 
+          src={siteConfig.assets.supporting.find(a => a.id.includes('about')).path} 
+          alt="About our business"
+          loading="lazy"
+        />
       </div>
     )}
   </div>
 </section>
+
+<style>
+  .about__content {
+    max-width: 48rem;
+    margin: 0 auto;
+  }
+  
+  .about__story {
+    font-size: clamp(1rem, 2vw, 1.125rem);
+    line-height: 1.7;
+    color: var(--color-text);
+    margin-bottom: 2.5rem;
+  }
+  
+  .card--differentiator {
+    text-align: center;
+    padding: 2rem 1.5rem;
+  }
+  
+  .differentiator__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    margin: 0 auto 1rem;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: white;
+    font-size: 1.5rem;
+  }
+  
+  .about__media {
+    margin-top: 3rem;
+    border-radius: var(--radius);
+    overflow: hidden;
+    max-width: 48rem;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  
+  .about__media img {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+</style>
