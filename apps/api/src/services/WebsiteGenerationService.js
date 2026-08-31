@@ -21,7 +21,9 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import GeneratedSiteManager from './GeneratedSiteManager.js';
+import DesignIntelligenceService from './DesignIntelligenceService.js';
 import { validateFactualFields, sanitizeAICopy } from './FactualDataValidator.js';
+import { config } from '../config/env.js';
 
 // Deterministic category → theme defaults used when no AI spec is available.
 const THEMES = {
@@ -82,11 +84,10 @@ class WebsiteGenerationService {
   /**
    * @param {object} business  verified intelligence object from extractBusinessIntelligenceWithProviders
    * @param {object} [options]
-   *   strategy  - WebsiteStrategyService JSON (optional)
-   *   copy      - WebsiteCopywritingService JSON (optional)
-   *   spec      - LandingPageSpecService JSON (optional)
+   *   designIntelligence  - DesignIntelligenceService JSON (optional, will be generated if not provided)
    *   build     - run install+build (default true); set false to just scaffold
    *   start     - start server after build (default true)
+   *   regenerateMode - 'content' | 'design' | 'assets' | 'all' (default 'all')
    */
   async generate(business, options = {}) {
     if (!business || !business.identity?.name) {
@@ -94,7 +95,29 @@ class WebsiteGenerationService {
     }
 
     const slug = this.slugify(business.identity.name);
-    const config = await this.assembleConfig(business, options);
+    
+    // Generate or use provided design intelligence
+    let designIntelligence = options.designIntelligence;
+    if (!designIntelligence && !options.skipAIDesign) {
+      try {
+        const { default: BrandStrategyService } = await import('./BrandStrategyService.js');
+        const { default: DigitalAuditService } = await import('./DigitalAuditService.js');
+        
+        const brandDNA = await BrandStrategyService.generateBrandDNA(business);
+        const digitalAudit = await DigitalAuditService.auditDigitalPresence(business);
+        designIntelligence = await DesignIntelligenceService.generateDesignIntelligence(
+          business, brandDNA, digitalAudit, options
+        );
+      } catch (error) {
+        console.error('[WebsiteGenerationService] AI design generation failed, using deterministic fallback:', error.message);
+        designIntelligence = null;
+      }
+    }
+
+    const config = await this.assembleConfig(business, { 
+      ...options, 
+      designIntelligence 
+    });
     // `_validation` is an internal audit record; keep it out of the written JSON.
     const { _validation, ...writtenConfig } = config;
 
@@ -107,6 +130,7 @@ class WebsiteGenerationService {
       slug,
       path: GeneratedSiteManager.siteDir(slug),
       status: 'scaffolded',
+      designIntelligence: designIntelligence ? DesignIntelligenceService.extractSummary(designIntelligence) : null,
     };
 
     const doBuild = options.build !== false;
@@ -137,41 +161,88 @@ class WebsiteGenerationService {
   }
 
   /**
-   * Deterministically assemble site.config.json from verified facts + AI config.
+   * Assemble site.config.json from verified facts + design intelligence (AI or deterministic).
+   * V2: Uses DesignIntelligenceService output when available for richer, business-specific output.
    */
   async assembleConfig(business, options = {}) {
     const facts = this.extractFacts(business);
-    const copyJSON = options.copy || null;
-    const spec = options.spec || null;
-    const strategy = options.strategy || null;
+    const designIntelligence = options.designIntelligence || null;
+    
+    // Determine copy source: AI-generated (from design intelligence) or deterministic fallback
+    let cleanCopy;
+    let copyIssues = [];
+    
+    if (designIntelligence?.contentStrategy) {
+      // Use AI-generated content strategy, sanitize for factual safety
+      const aiCopy = this.convertContentStrategyToCopy(designIntelligence.contentStrategy, facts);
+      const { clean, issues } = sanitizeAICopy(aiCopy, { 
+        phone: facts.phone, 
+        email: facts.email, 
+        rating: facts.rating 
+      });
+      cleanCopy = clean;
+      copyIssues = issues;
+    } else {
+      // Fallback to deterministic copy
+      cleanCopy = this.defaultCopy(facts);
+      copyIssues = [];
+    }
 
-    // Sanitize AI copy; drop invented factual claims.
-    const { clean: cleanCopy, issues: copyIssues } = copyJSON
-      ? sanitizeAICopy(copyJSON, { phone: facts.phone, email: facts.email, rating: facts.rating })
-      : { clean: this.defaultCopy(facts), issues: [] };
+    // Theme: use AI-generated design system or deterministic fallback
+    const theme = designIntelligence?.designSystem 
+      ? this.convertDesignSystemToTheme(designIntelligence.designSystem)
+      : this.resolveTheme(facts, null);
 
-    const theme = this.resolveTheme(facts, spec);
-    const sections = this.resolveSections(facts, cleanCopy);
-    const primaryCta = this.resolvePrimaryCta(facts, spec, strategy);
-    const secondaryCta = this.resolveSecondaryCta(facts, spec, strategy);
+    // Sections: use AI-generated page architecture or deterministic fallback
+    const sections = designIntelligence?.pageArchitecture?.sections
+      ? designIntelligence.pageArchitecture.sections
+          .filter(s => s.priority === 'critical' || s.priority === 'essential' || 
+                       (s.priority === 'recommended' && this.hasRequiredFacts(facts, s.requiredFacts)))
+          .map(s => s.id)
+      : this.resolveSections(facts, cleanCopy);
+
+    // CTA: use AI-generated content strategy or deterministic fallback
+    const primaryCta = designIntelligence?.contentStrategy?.hero?.cta
+      ? { 
+          text: designIntelligence.contentStrategy.hero.cta.primary,
+          action: designIntelligence.contentStrategy.hero.cta.action,
+          href: null
+        }
+      : this.resolvePrimaryCta(facts, null, null);
+      
+    const secondaryCta = designIntelligence?.contentStrategy?.hero?.secondaryCta
+      ? {
+          text: designIntelligence.contentStrategy.hero.secondaryCta?.text,
+          href: designIntelligence.contentStrategy.hero.secondaryCta?.action
+        }
+      : this.resolveSecondaryCta(facts, null, null);
+
+    // Convert design system to theme format
+    const theme = this.convertDesignSystemToTheme(designIntelligence?.designSystem, facts);
 
     const config = {
       site: {
         slug: this.slugify(facts.name),
         title: facts.name,
-        description: this.descriptionFor(facts, cleanCopy),
+        description: designIntelligence?.contentStrategy?.hero?.subheadline 
+          || this.descriptionFor(facts, null),
         lang: 'en',
         style: theme.style,
       },
       business: facts,
       facts: this.verifiedFacts(facts),
-      copy: cleanCopy || this.defaultCopy(facts),
+      copy: this.convertContentStrategyToCopy(designIntelligence?.contentStrategy, facts) || this.defaultCopy(facts),
       sections,
       theme,
       primaryCta,
       secondaryCta,
       provenance: business.source?.providers || {},
       generatedAt: new Date().toISOString(),
+      designIntelligence: {
+        layoutFamily: options.designIntelligence?.pageArchitecture?.layoutFamily,
+        visualDirection: options.designIntelligence?.designSystem?.visualDirection,
+        assetPlan: options.designIntelligence?.assetPlan,
+      }
     };
 
     // Factual safety: assembled factual fields must match the verified profile.
@@ -336,9 +407,164 @@ class WebsiteGenerationService {
   }
 
   /**
-   * List generated sites (from manifest) for the UI.
+   * Convert AI content strategy to copy format for renderer
    */
-  async list() {
+  convertContentStrategyToCopy(contentStrategy, facts) {
+    if (!contentStrategy) return null;
+    
+    const name = facts.name || 'This business';
+    
+    return {
+      hero: {
+        headline: contentStrategy.hero?.headline || name,
+        subheadline: contentStrategy.hero?.subheadline || facts.description || `${name} — ${facts.category || 'local business'}.`,
+        cta: contentStrategy.hero?.cta?.primary || null,
+        secondaryCta: contentStrategy.hero?.secondaryCta?.text || null,
+      },
+      services: {
+        heading: contentStrategy.sections?.services?.heading || 'What we offer',
+        items: contentStrategy.sections?.services?.items?.map(item => ({
+          name: item.name,
+          description: item.description || '',
+          benefits: item.benefits || []
+        })) || (facts.categories && facts.categories.length ? facts.categories.map(c => ({ name: c, description: '' })) : []),
+      },
+      about: {
+        heading: contentStrategy.sections?.about?.heading || 'About',
+        story: contentStrategy.sections?.about?.story || facts.description || `Welcome to ${name}.`,
+        differentiators: contentStrategy.sections?.about?.differentiators || [],
+      },
+      faq: contentStrategy.sections?.faq?.questions?.map(q => ({
+        question: q.question,
+        answer: q.answer
+      })) || [],
+      trust: contentStrategy.sections?.trust?.elements || [],
+      statistics: contentStrategy.sections?.statistics?.items || [],
+      location: contentStrategy.sections?.location || null,
+      hours: contentStrategy.sections?.hours || null,
+      contact: contentStrategy.sections?.contact || null,
+      cta: contentStrategy.sections?.cta || null,
+    };
+  }
+
+  /**
+   * Convert AI design system to theme format for renderer
+   */
+  convertDesignSystemToTheme(designSystem, facts) {
+    if (!designSystem) {
+      // Fallback to deterministic theme
+      const cat = facts.category || (facts.categories && facts.categories[0]) || '';
+      for (const [re, key] of CATEGORY_TO_THEME) {
+        if (re.test(cat)) return THEMES[key];
+      }
+      return THEMES.default;
+    }
+
+    const ds = designSystem;
+    return {
+      style: ds.visualDirection || 'custom',
+      colorPalette: {
+        primary: ds.colorSystem?.primary || '#2563eb',
+        secondary: ds.colorSystem?.secondary || '#7c3aed',
+        accent: ds.colorSystem?.accent || '#f59e0b',
+        background: ds.colorSystem?.background || '#ffffff',
+        surface: ds.colorSystem?.surface || '#f8fafc',
+        text: ds.colorSystem?.text || '#0f172a',
+        muted: ds.colorSystem?.mutedText || '#64748b',
+      },
+      typography: {
+        headingFont: ds.typography?.display?.family || "Georgia, 'Times New Roman', serif",
+        bodyFont: ds.typography?.body?.family || "system-ui, -apple-system, sans-serif",
+      },
+      borderRadius: ds.shapeLanguage?.radius || '12px',
+      // Additional design tokens for enhanced renderer
+      designTokens: {
+        motion: ds.motion,
+        imageTreatment: ds.imageTreatment,
+        iconTreatment: ds.iconTreatment,
+        layout: ds.layout,
+        weightScale: ds.typography?.weightScale,
+        letterSpacing: ds.typography?.letterSpacing,
+        shadowStyle: ds.imageTreatment?.shadowStyle,
+      }
+    };
+  }
+
+  /**
+   * Check if business has required facts for a section
+   */
+  hasRequiredFacts(facts, requiredFacts) {
+    if (!requiredFacts || !requiredFacts.length) return true;
+    return requiredFacts.every(factPath => {
+      const value = factPath.split('.').reduce((obj, key) => obj?.[key], facts);
+      return value != null && value !== '';
+    });
+  }
+
+  /**
+   * Check if business has required facts for a section (deterministic fallback)
+   */
+  resolveTheme(facts, spec) {
+    const specTheme = spec?.theme;
+    if (specTheme && !specTheme.error && (specTheme.colorPalette || specTheme.typography)) {
+      const base = THEMES.default;
+      return {
+        style: specTheme.style || base.style,
+        colorPalette: {
+          primary: specTheme.colorPalette?.primary || base.colorPalette.primary,
+          secondary: specTheme.colorPalette?.secondary || base.colorPalette.secondary,
+          accent: specTheme.colorPalette?.accent || base.colorPalette.accent,
+          background: specTheme.colorPalette?.background || base.colorPalette.background,
+          surface: specTheme.colorPalette?.surface || base.colorPalette.surface,
+          text: specTheme.colorPalette?.text || base.colorPalette.text,
+          muted: specTheme.colorPalette?.muted || base.colorPalette.muted,
+        },
+        typography: {
+          headingFont: specTheme.typography?.headingFont || base.typography.headingFont,
+          bodyFont: specTheme.typography?.bodyFont || base.typography.bodyFont,
+        },
+        borderRadius: base.borderRadius,
+      };
+    }
+    const cat = facts.category || (facts.categories && facts.categories[0]) || '';
+    for (const [re, key] of CATEGORY_TO_THEME) {
+      if (re.test(cat)) return THEMES[key];
+    }
+    return THEMES.default;
+  }
+
+  resolveSections(facts, copy) {
+    const sections = ['hero'];
+    if (facts.description || (copy?.about?.story && copy.about.story !== `Welcome to ${facts.name}.`)) sections.push('about');
+    const hasServices = (facts.categories && facts.categories.length) || (copy?.services?.items && copy.services.items.length);
+    if (hasServices) sections.push('services');
+    if (facts.hours || facts.hoursText) sections.push('hours');
+    if (facts.latitude != null || facts.longitude != null || facts.address) sections.push('location');
+    if (facts.phone || facts.email || facts.website) sections.push('contact');
+    if (copy?.faq && copy.faq.length) sections.push('faq');
+    sections.push('cta');
+    return Array.from(new Set(sections));
+  }
+
+  resolvePrimaryCta(facts, spec, strategy) {
+    const specCta = spec?.primaryCTA;
+    if (specCta?.text) {
+      return { text: specCta.text, action: specCta.action || 'contact', href: null };
+    }
+    // Deterministic default based on available channels.
+    if (facts.phone) return { text: facts.category ? `Call ${facts.name}` : 'Call now', action: 'call', href: null };
+    if (facts.website) return { text: 'Visit our website', action: 'website', href: null };
+    return { text: 'Get directions', action: 'directions', href: null };
+  }
+
+  resolveSecondaryCta(facts, spec, strategy) {
+    const specSecondary = spec?.sections?.find?.((s) => s.type === 'hero')?.content?.secondaryCta;
+    if (specSecondary?.text) {
+      return { text: specSecondary.text, href: null };
+    }
+    if (facts.phone && facts.website) return { text: 'Visit website', href: facts.website };
+    return null;
+  }
     const manifest = await GeneratedSiteManager.readManifest();
     const entries = Object.entries(manifest).map(([slug, m]) => ({
       slug,
