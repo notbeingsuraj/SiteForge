@@ -155,10 +155,6 @@ class BusinessProfile {
       });
     }
     
-    const provenancePriority = { verified: 4, discovered: 3, user_provided: 3, identified: 2, inferred: 1 };
-    const currentPriority = current?.provenance ? provenancePriority[current.provenance] : 0;
-    const newPriority = provenancePriority[provenance];
-    
     if (newPriority > currentPriority || (newPriority === currentPriority && confidence > (current?.confidence || 0))) {
       target[field] = {
         value,
@@ -596,13 +592,13 @@ class BusinessProfile {
    * @returns {Array} Array of evidence objects
    */
   getEvidenceForField(path) {
-    const evidence = [];
-    for (const evidence of this.evidenceStore.values()) {
-      if (evidence.fieldPath === path) {
-        evidence.push(evidence.toObject());
+    const result = [];
+    for (const ev of this.evidenceStore.values()) {
+      if (ev.fieldPath === path) {
+        result.push(ev.toObject());
       }
     }
-    return evidence;
+    return result;
   }
 
   /**
