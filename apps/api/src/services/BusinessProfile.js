@@ -481,6 +481,450 @@ class BusinessProfile {
     countProvenance(this.data);
     return breakdown;
   }
+
+  // =========================================================================
+  // EVIDENCE SYSTEM - PHASE 2+ METHODS
+  // =========================================================================
+
+  /**
+   * Get all conflicts for a specific field path
+   * @param {string} path - Field path (e.g., 'contact.phone')
+   * @returns {Array} Array of conflict objects
+   */
+  getConflicts(path = null) {
+    const conflicts = [];
+    for (const conflict of this.conflictStore.values()) {
+      if (!path || conflict.fieldPath === path) {
+        conflicts.push(conflict);
+      }
+    }
+    return conflicts;
+  }
+
+  /**
+   * Get all conflicts across the profile
+   * @returns {Array} Array of all conflict objects
+   */
+  getAllConflicts() {
+    return Array.from(this.conflictStore.values());
+  }
+
+  /**
+   * Resolve a conflict using a specific strategy
+   * @param {string} conflictId - The conflict ID to resolve
+   * @param {string} strategy - Resolution strategy: 'authority_wins', 'most_recent', 'highest_confidence', 'manual_review', 'preserve_all'
+   * @param {string} reason - Reason for resolution
+   * @param {string} resolvedBy - Who/what resolved it
+   * @returns {boolean} True if resolved
+   */
+  resolveConflict(conflictId, strategy, reason = null, resolvedBy = 'system') {
+    const conflict = this.conflictStore.get(conflictId);
+    if (!conflict) return false;
+
+    if (conflict.status === 'resolved') return true;
+
+    const canonicalValue = this._resolveConflictByStrategy(conflict, strategy);
+    
+    if (canonicalValue !== null) {
+      // Update the canonical value in the profile
+      const field = conflict.fieldPath;
+      const parts = field.split('.');
+      let target = this.data;
+      for (let i = 0; i < parts.length - 1; i++) {
+        target = target[parts[i]];
+      }
+      const fieldName = parts[parts.length - 1];
+      
+      // Find the winning value object
+      const winningValue = conflict.values.find(v => v.value === canonicalValue);
+      
+      if (winningValue) {
+        target[field] = {
+          value: canonicalValue,
+          provenance: winningValue.provenance,
+          confidence: winningValue.confidence,
+          sourceInfo: winningValue.sourceInfo,
+          updatedAt: new Date().toISOString(),
+          evidenceId: winningValue.evidenceId,
+          sourceId: winningValue.sourceId,
+          retrievedAt: new Date().toISOString(),
+          conflictResolved: true,
+          conflictResolutionStrategy: conflict.resolutionStrategy
+        };
+      }
+    }
+
+    conflict.status = 'resolved';
+    conflict.resolutionStrategy = strategy;
+    conflict.resolutionReason = reason;
+    conflict.resolvedAt = new Date().toISOString();
+    conflict.resolvedBy = resolvedBy;
+
+    return true;
+  }
+
+  /**
+   * Resolve conflict using specified strategy
+   */
+  _resolveConflictByStrategy(conflict, strategy) {
+    if (!conflict.values || conflict.values.length === 0) return null;
+
+    switch (strategy) {
+      case 'authority_wins':
+        return conflict.values.reduce((best, curr) => 
+          (curr.authority || 0) > (best.authority || 0) ? curr : best
+        ).value;
+      case 'most_recent':
+        return conflict.values.reduce((best, curr) => 
+          new Date(curr.retrievedAt || 0) > new Date(best.retrievedAt || 0) ? curr : best
+        ).value;
+      case 'highest_confidence':
+        return conflict.values.reduce((best, curr) => 
+          (curr.confidence || 0) > (best.confidence || 0) ? curr : best
+        ).value;
+      case 'preserve_all':
+      case 'manual_review':
+      default:
+        // Return the first value (current canonical)
+        return conflict.values[0]?.value || null;
+    }
+  }
+
+  /**
+   * Get all evidence for a specific field path
+   * @param {string} path - Field path
+   * @returns {Array} Array of evidence objects
+   */
+  getEvidenceForField(path) {
+    const evidence = [];
+    for (const evidence of this.evidenceStore.values()) {
+      if (evidence.fieldPath === path) {
+        evidence.push(evidence.toObject());
+      }
+    }
+    return evidence;
+  }
+
+  /**
+   * Get all sources for a specific field path
+   * @param {string} path - Field path
+   * @returns {Array} Array of source objects
+   */
+  getSourcesForField(path) {
+    const sources = [];
+    // Find claim for this field
+    for (const claim of this.claimStore.values()) {
+      if (claim.fieldPath === path) {
+        for (const sourceRef of claim.sources) {
+          const source = this.sourceRegistry.get(sourceRef.sourceId);
+          if (source) {
+            sources.push({
+              ...source.toObject(),
+              provenance: sourceRef.provenance,
+              confidence: sourceRef.confidence,
+              isPrimary: sourceRef.isPrimary
+            });
+          }
+        }
+      }
+    }
+    return sources;
+  }
+
+  /**
+   * Get all claims for a specific field path
+   * @param {string} path - Field path
+   * @returns {Array} Array of claim objects
+   */
+  getClaimsForField(path) {
+    const claims = [];
+    for (const claim of this.claimStore.values()) {
+      if (claim.fieldPath === path) {
+        claims.push(claim.toObject ? claim.toObject() : claim);
+      }
+    }
+    return claims;
+  }
+
+  /**
+   * Get all evidence across the profile
+   * @returns {Array} Array of all evidence objects
+   */
+  getAllEvidence() {
+    return Array.from(this.evidenceStore.values()).map(e => e.toObject());
+  }
+
+  /**
+   * Get all sources across the profile
+   * @returns {Array} Array of all source objects
+   */
+  getAllSources() {
+    return Array.from(this.sourceRegistry.values()).map(s => s.toObject());
+  }
+
+  /**
+   * Get all claims across the profile
+   * @returns {Array} Array of all claim objects
+   */
+  getAllClaims() {
+    return Array.from(this.claimStore.values()).map(c => c.toObject ? c.toObject() : c);
+  }
+
+  /**
+   * Get source independence analysis for a field
+   * @param {string} path - Field path
+   * @returns {Object} Independence analysis
+   */
+  getSourceIndependence(path) {
+    const sources = this.getSourcesForField(path);
+    return SourceIndependenceAnalyzer.analyze(sources);
+  }
+
+  /**
+   * Detect potential copy relationships between sources for a field
+   * @param {string} path - Field path
+   * @returns {Array} Array of copy pairs
+   */
+  detectCopyPairs(path) {
+    const sources = this.getSourcesForField(path);
+    return SourceIndependenceAnalyzer.detectCopyPairs(sources);
+  }
+
+  /**
+   * Get temporal metadata for a field
+   * @param {string} path - Field path
+   * @returns {Object} Temporal metadata
+   */
+  getTemporalMetadata(path) {
+    const claim = this._findClaimByNormalizedValue(path, this._normalizeValueForClaim(path, this.get(path)));
+    if (claim) {
+      return claim.temporalMetadata;
+    }
+    return null;
+  }
+
+  /**
+   * Update temporal metadata for a field
+   * @param {string} path - Field path
+   * @param {Object} temporalData - Temporal metadata to update
+   */
+  updateTemporalMetadata(path, temporalData) {
+    const value = this.get(path);
+    if (value == null) return false;
+    
+    const normalizedValue = this._normalizeValueForClaim(path, value);
+    const claim = this._findClaimByNormalizedValue(path, normalizedValue);
+    
+    if (claim) {
+      claim.temporalMetadata = {
+        ...claim.temporalMetadata,
+        ...temporalData
+      };
+      claim.updatedAt = new Date().toISOString();
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Get claim type for a field
+   * @param {string} path - Field path
+   * @returns {string} Claim type: 'fact', 'observation', 'inference'
+   */
+  getClaimType(path) {
+    const claim = this._findClaimByNormalizedValue(path, this._normalizeValueForClaim(path, this.get(path)));
+    return claim?.claimType || 'fact';
+  }
+
+  /**
+   * Get verification status for a field
+   * @param {string} path - Field path
+   * @returns {string} Verification status
+   */
+  getVerificationStatus(path) {
+    const claim = this._findClaimByNormalizedValue(path, this._normalizeValueForClaim(path, this.get(path)));
+    return claim?.verificationStatus || 'unverified';
+  }
+
+  /**
+   * Set verification status for a field
+   * @param {string} path - Field path
+   * @param {string} status - Verification status
+   */
+  setVerificationStatus(path, status) {
+    const value = this.get(path);
+    if (value == null) return false;
+    
+    const normalizedValue = this._normalizeValueForClaim(path, value);
+    const claim = this._findClaimByNormalizedValue(path, normalizedValue);
+    
+    if (claim) {
+      claim.verificationStatus = status;
+      claim.updatedAt = new Date().toISOString();
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Get confidence for a field (enhanced with evidence)
+   * @param {string} path - Field path
+   * @returns {number} Confidence score
+   */
+  getConfidenceWithEvidence(path) {
+    const baseConfidence = this.getField(path)?.confidence || 0;
+    const claim = this._findClaimByNormalizedValue(path, this._normalizeValueForClaim(path, this.get(path)));
+    
+    if (!claim) return baseConfidence;
+
+    // Adjust confidence based on evidence
+    const evidenceCount = claim.evidence?.length || 0;
+    const sourceCount = claim.sources?.length || 0;
+    const primarySourceCount = claim.sources?.filter(s => s.isPrimary).length || 0;
+    
+    let adjustedConfidence = claim.confidence || 0;
+    
+    // Boost for multiple independent sources
+    if (sourceCount > 1) {
+      adjustedConfidence = Math.min(1, adjustedConfidence + 0.1 * Math.min(sourceCount, 3));
+    }
+    
+    // Boost for primary sources
+    if (primarySourceCount > 0) {
+      adjustedConfidence = Math.min(1, adjustedConfidence + 0.05 * primarySourceCount);
+    }
+    
+    // Boost for multiple pieces of evidence
+    if (evidenceCount > 1) {
+      adjustedConfidence = Math.min(1, adjustedConfidence + 0.05 * Math.min(evidenceCount, 3));
+    }
+    
+    // Penalize if there are unresolved conflicts
+    const conflicts = this.getConflicts(this._getPathForClaim(this._findClaimByNormalizedValue(null, this._normalizeValueForClaim(null, this.get(path)))));
+    if (conflicts.length > 0) {
+      adjustedConfidence = Math.max(0, adjustedConfidence - 0.15);
+    }
+    
+    return Math.max(0, Math.min(1, adjustedConfidence));
+  }
+
+  /**
+   * Get enhanced field info with evidence, conflicts, and provenance
+   * @param {string} path - Field path
+   * @returns {Object} Enhanced field info
+   */
+  getFieldWithEvidence(path) {
+    const baseField = this.getField(path);
+    if (!baseField) return null;
+    
+    const value = this.get(path);
+    const conflicts = this.getConflicts(path);
+    const evidence = this.getEvidenceForField(path);
+    const sources = this.getSourcesForField(path);
+    const claims = this.getClaimsForField(path);
+    const independence = this.getSourceIndependence(path);
+    const temporal = this.getTemporalMetadata(path);
+    const claimType = this.getClaimType(path);
+    const verificationStatus = this.getVerificationStatus(path);
+    const confidenceWithEvidence = this.getConfidenceWithEvidence(path);
+    
+    return {
+      ...baseField,
+      value: baseField.value,
+      conflicts: conflicts.length > 0 ? conflicts : null,
+      conflictCount: conflicts.length,
+      evidenceCount: evidence.length,
+      sourceCount: sources.length,
+      claimCount: claims.length,
+      independence: independence,
+      temporal: temporal,
+      claimType: claimType,
+      verificationStatus: verificationStatus,
+      enhancedConfidence: confidenceWithEvidence,
+      hasConflict: conflicts.length > 0
+    };
+  }
+
+  /**
+   * Get enhanced profile object with all evidence/conflict information
+   * @returns {Object} Full profile with evidence metadata
+   */
+  toEvidenceObject() {
+    const base = this.toFullObject();
+    const conflicts = this.getAllConflicts();
+    const evidence = this.getAllEvidence();
+    const sources = this.getAllSources();
+    const claims = this.getAllClaims();
+    
+    return {
+      ...base,
+      entityId: this.getEntityId(),
+      evidence: evidence,
+      sources: sources,
+      claims: claims,
+      conflicts: conflicts,
+      conflictCount: conflicts.length,
+      evidenceCount: evidence.length,
+      sourceCount: sources.length,
+      claimCount: claims.length,
+      _evidenceSystem: true
+    };
+  }
+
+  /**
+   * Get field path from claim object (helper)
+   */
+  _getPathForClaim(claim) {
+    return claim?.fieldPath || null;
+  }
+
+  /**
+   * Enhanced toObject that includes conflict flags
+   */
+  toObjectWithConflicts() {
+    const result = {};
+    const conflicts = this.getAllConflicts();
+    const conflictPaths = new Set(conflicts.map(c => c.fieldPath));
+    
+    const extractValues = (obj, prefix = '') => {
+      for (const [key, value] of Object.entries(obj)) {
+        const path = prefix ? `${prefix}.${key}` : key;
+        if (value && typeof value === 'object' && 'value' in value) {
+          result[path] = {
+            value: value.value,
+            provenance: value.provenance,
+            confidence: value.confidence,
+            hasConflict: conflictPaths.has(path),
+            conflictCount: conflicts.filter(c => c.fieldPath === path).length
+          };
+        } else if (typeof value === 'object' && value !== null) {
+          extractValues(value, path);
+        }
+      }
+    };
+    
+    extractValues(this.data);
+    return result;
+  }
+
+  /**
+   * Get field with enhanced provenance info (backwards compatible with getField)
+   * @param {string} path - Field path
+   * @returns {Object} Field with enhanced provenance
+   */
+  getFieldEnhanced(path) {
+    const baseField = this.getField(path);
+    if (!baseField) return null;
+    
+    return {
+      ...baseField,
+      evidenceId: baseField.evidenceId,
+      sourceId: baseField.sourceId,
+      retrievedAt: baseField.retrievedAt,
+      conflictId: this.getConflicts(path)[0]?.id,
+      hasConflict: this.getConflicts(path).length > 0
+    };
+  }
 }
 
 export default BusinessProfile;
