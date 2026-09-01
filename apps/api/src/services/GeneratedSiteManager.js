@@ -88,8 +88,12 @@ class GeneratedSiteManager {
   async allocatePort(excludeSlug = null) {
     const manifest = await this.readManifest();
     for (let port = this.basePort; port <= this.maxPort; port++) {
-      // Skip if assigned to a different, still-managed site.
-      const ownedBy = Object.entries(manifest).find(([, m]) => m?.port === port);
+      // Skip if assigned to a different, still-managed site that is actually
+      // tracked as running. Stale/stopped manifest entries do not block reuse —
+      // the live socket check below is the authoritative availability test.
+      const ownedBy = Object.entries(manifest).find(
+        ([, m]) => m?.port === port && m?.status === 'running'
+      );
       if (ownedBy && ownedBy[0] !== excludeSlug) continue;
       if (await this.isPortFree(port)) return port;
     }
@@ -222,7 +226,7 @@ class GeneratedSiteManager {
       });
       server.listen(port, host, () => {
         // Signal readiness on fd 3 (used by the parent spawn with pipe).
-        process.stdout.write('WEBLOOM_SERVER_READY ' + port + '\n');
+        process.stdout.write('WEBLOOM_SERVER_READY ' + port + '\\n');
       });
       server.on('error', (e) => { console.error('WEBLOOM_SERVER_ERROR ' + (e && e.message)); process.exit(1); });
       process.on('SIGTERM', () => server.close(() => process.exit(0)));
