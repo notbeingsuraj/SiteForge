@@ -23,7 +23,7 @@
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════╗
-║  SITEFORGE // AI WEBSITE ENGINE                                       ║
+║  WEBLOOM // AI WEBSITE ENGINE                                        ║
 ║  ─────────────────────────────────────────────────────────────────   ║
 ║  INPUT ▸ EXTRACT ▸ ANALYZE ▸ STRATEGIZE ▸ SPECIFY ▸ VALIDATE ▸ BUILD  ║
 ║                                                                       ║
@@ -35,13 +35,13 @@
 
 <br>
 
-## `>_` WHAT IS SITEFORGE
+## `>_` WHAT IS WEBLOOM
 
-SiteForge is an AI-powered website engineering pipeline that turns raw business
+Webloom is an AI-powered website engineering pipeline that turns raw business
 information into structured, validated website intelligence.
 
 Instead of firing one giant prompt at an LLM and praying to the JSON gods,
-SiteForge splits the workflow into discrete services — each with an explicit
+Webloom splits the workflow into discrete services — each with an explicit
 contract, a defined input/output shape, and a validation boundary.
 
 ```
@@ -90,7 +90,7 @@ contract, a defined input/output shape, and a validation boundary.
 | **Node.js** | `18+` | Recommended |
 | **npm** | — | Ships with Node.js |
 | **Git** | — | Required |
-| **OmniRoute API Key** | — | **You must bring your own.** SiteForge does not ship with one. |
+| **OmniRoute API Key** | — | **You must bring your own.** Webloom does not ship with one. |
 
 <br>
 
@@ -160,10 +160,10 @@ node test_full_pipeline_fixed.js
 
 ## `>_` OMNIROUTE SETUP
 
-SiteForge uses **OmniRoute** as its AI routing layer:
+Webloom uses **OmniRoute** as its AI routing layer:
 
 ```
-   SITEFORGE
+   WEBLOOM
        │
        ▼
    OMNIROUTE API
@@ -205,7 +205,7 @@ A healthy pipeline looks like this:
 
 ```
 ╭────────────────────────────────────────────╮
-│  SITEFORGE PIPELINE                        │
+│  WEBLOOM PIPELINE                          │
 ├────────────────────────────────────────────┤
 │  [✓] PLACE RESOLUTION                      │
 │  [✓] BUSINESS DATA                         │

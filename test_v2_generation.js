@@ -117,7 +117,7 @@ async function runTest() {
         business, brandDNA, digitalAudit,
         { skipAIDesign: true } // Use deterministic fallback
       );
-      const summary = designIntelligenceService.extractSummary(designIntelligence);
+      const summary = DesignIntelligenceService.extractSummary(designIntelligence);
       console.log(`     ✓ Layout: ${summary.layoutFamily} | Theme: ${summary.visualDirection} | Primary: ${summary.primaryColor}`);
       console.log(`     Sections: ${summary.sections.join(', ')}`);
       console.log(`     Hero Asset: ${summary.heroAsset} | Supporting: ${summary.supportingAssets}`);

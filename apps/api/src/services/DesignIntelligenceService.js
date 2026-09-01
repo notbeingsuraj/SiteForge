@@ -1079,14 +1079,6 @@ class DesignIntelligenceService {
       supportingAssets: Array.isArray(ap.supporting) ? ap.supporting.length : 0,
       primaryCTA: cs.hero?.cta?.primary || null,
     };
-      visualDirection: intelligence.designSystem.visualDirection,
-      primaryColor: intelligence.designSystem.colorSystem.primary,
-      typography: `${intelligence.designSystem.typography.display.family} / ${intelligence.designSystem.typography.body.family}`,
-      sections: intelligence.pageArchitecture.sections.map(s => s.id),
-      heroAsset: intelligence.assetPlan.hero?.type,
-      supportingAssets: intelligence.assetPlan.supporting?.length || 0,
-      primaryCTA: intelligence.contentStrategy.hero.cta?.primary,
-    };
   }
 }
 
