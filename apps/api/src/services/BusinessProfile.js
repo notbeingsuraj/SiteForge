@@ -11,7 +11,13 @@
  * 
  * CRITICAL: Only IDENTIFIED/DISCOVERED/VERIFIED factual information may enter the factual BusinessProfile.
  * INFERRED information must never be presented as verified business data.
+ * 
+ * EVIDENCE SYSTEM (Phase 2+):
+ * Each field can now track multiple competing values with full provenance,
+ * conflict detection, temporal metadata, and source independence.
  */
+
+import { Evidence, Source, Claim, Conflict, SourceIndependenceAnalyzer } from './EvidenceModels.js';
 
 class BusinessProfile {
   constructor() {
@@ -50,6 +56,27 @@ class BusinessProfile {
         updatedAt: new Date().toISOString(),
       },
     };
+
+    // Evidence system (Phase 2+)
+    this.evidenceStore = new Map(); // evidenceId -> Evidence
+    this.sourceRegistry = new Map(); // sourceId -> Source
+    this.claimStore = new Map(); // claimId -> Claim
+    this.conflictStore = new Map(); // conflictId -> Conflict
+    this.entityId = null; // Will be set during profile creation
+  }
+
+  /**
+   * Set the entity ID for this profile
+   */
+  setEntityId(entityId) {
+    this.entityId = entityId;
+  }
+
+  /**
+   * Get the entity ID for this profile
+   */
+  getEntityId() {
+    return this.entityId || `ent_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   }
 
   set(path, value, provenance, confidence, sourceInfo = {}) {
@@ -75,6 +102,63 @@ class BusinessProfile {
     const currentPriority = current?.provenance ? provenancePriority[current.provenance] : 0;
     const newPriority = provenancePriority[provenance];
     
+    // Check for conflict before potentially overwriting
+    const isNewValue = value !== current?.value;
+    const hasExistingValue = current?.value != null;
+    
+    // Create source if sourceInfo provided
+    let sourceId = null;
+    if (sourceInfo.sourceUrl || sourceInfo.provider) {
+      const source = new Source({
+        url: sourceInfo.sourceUrl,
+        provider: sourceInfo.provider,
+        sourceType: this._inferSourceType(sourceInfo.provider),
+        authority: this._inferAuthority(sourceInfo.provider),
+        isPrimary: sourceInfo.isPrimary || false,
+        retrievedAt: new Date().toISOString(),
+        metadata: sourceInfo.metadata || {}
+      });
+      this.sourceRegistry.set(source.id, source);
+      sourceId = source.id;
+    }
+
+    // Create evidence if we have a source
+    let evidenceId = null;
+    if (sourceId && value != null && value !== '') {
+      const evidence = new Evidence({
+        sourceId,
+        fieldPath: path,
+        value,
+        excerpt: sourceInfo.excerpt || null,
+        extractedAt: new Date().toISOString(),
+        extractionMethod: sourceInfo.extractionMethod || 'apiResponse',
+        metadata: sourceInfo.metadata || {}
+      });
+      this.evidenceStore.set(evidence.id, evidence);
+      evidenceId = evidence.id;
+    }
+
+    // Check for conflict before updating
+    if (isNewValue && hasExistingValue && current?.value !== value) {
+      this._detectAndStoreConflict(path, {
+        oldValue: current.value,
+        newValue: value,
+        oldProvenance: current.provenance,
+        newProvenance: provenance,
+        oldConfidence: current.confidence,
+        newConfidence: confidence,
+        oldSourceInfo: current.sourceInfo,
+        newSourceInfo: sourceInfo,
+        oldEvidenceId: current.evidenceId,
+        newEvidenceId: evidenceId,
+        sourceId
+      });
+    }
+    
+    const provenancePriority = { verified: 4, discovered: 3, user_provided: 3, identified: 2, inferred: 1 };
+    const currentPriority = current?.provenance ? provenancePriority[current.provenance] : 0;
+    const newPriority = provenancePriority[provenance];
+    
     if (newPriority > currentPriority || (newPriority === currentPriority && confidence > (current?.confidence || 0))) {
       target[field] = {
         value,
@@ -82,6 +166,9 @@ class BusinessProfile {
         confidence,
         sourceInfo,
         updatedAt: new Date().toISOString(),
+        evidenceId: evidenceId,
+        sourceId: sourceId,
+        retrievedAt: new Date().toISOString()
       };
       
       if (sourceInfo.sourceUrl && !this.data.metadata.sources.includes(sourceInfo.sourceUrl)) {
@@ -99,6 +186,185 @@ class BusinessProfile {
       
       this.data.metadata.updatedAt = new Date().toISOString();
     }
+
+    // Create/update claim
+    this._createOrUpdateClaim(path, value, provenance, confidence, sourceId, evidenceId);
+  }
+
+  /**
+   * Detect and store a conflict when a new value differs from existing
+   */
+  _detectAndStoreConflict(path, conflictData) {
+    const { oldValue, newValue, oldProvenance, newProvenance, oldConfidence, newConfidence, oldSourceInfo, newSourceInfo, oldEvidenceId, newEvidenceId, sourceId } = conflictData;
+    
+    // Create claims for both values if they don't exist
+    const oldClaimId = this._findClaimByValue(path, oldValue);
+    const newClaimId = this._findClaimByValue(path, newValue);
+    
+    // Create conflict object
+    const conflict = {
+      fieldPath: path,
+      values: [
+        {
+          value: oldValue,
+          provenance: oldProvenance,
+          confidence: oldConfidence,
+          sourceInfo: oldSourceInfo,
+          evidenceId: oldEvidenceId,
+          retrievedAt: new Date().toISOString()
+        },
+        {
+          value: newValue,
+          provenance: newProvenance,
+          confidence: newConfidence,
+          sourceInfo: newSourceInfo,
+          evidenceId: newEvidenceId,
+          retrievedAt: new Date().toISOString()
+        }
+      ],
+      status: 'conflicted',
+      detectedAt: new Date().toISOString()
+    };
+    
+    const conflictId = `conf_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    this.conflictStore.set(conflictId, conflict);
+    
+    // Log conflict for observability
+    console.warn(`[BusinessProfile] Conflict detected on ${path}: "${oldValue}" vs "${newValue}"`);
+  }
+
+  /**
+   * Create or update a claim for a field value
+   */
+  _createOrUpdateClaim(path, value, provenance, confidence, sourceId, evidenceId) {
+    if (value == null || value === '') return;
+    
+    const normalizedValue = this._normalizeValueForClaim(path, value);
+    let claim = this._findClaimByNormalizedValue(path, normalizedValue);
+    
+    if (!claim) {
+      claim = {
+        id: `clm_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        entityId: this.getEntityId(),
+        fieldPath: path,
+        value,
+        normalizedValue,
+        claimType: this._inferClaimType(path, provenance),
+        sources: [],
+        evidence: [],
+        confidence: 0.5,
+        verificationStatus: 'unverified',
+        temporalMetadata: {
+          retrievedAt: new Date().toISOString(),
+          publishedAt: null,
+          observedAt: null,
+          lastVerifiedAt: null
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      this.claimStore.set(claim.id, claim);
+    }
+    
+    // Update claim with new source/evidence
+    if (sourceId && !claim.sources.some(s => s.sourceId === sourceId)) {
+      claim.sources.push({
+        sourceId,
+        provenance,
+        confidence,
+        isPrimary: false
+      });
+    }
+    
+    if (evidenceId && !claim.evidence.includes(evidenceId)) {
+      claim.evidence.push(evidenceId);
+    }
+    
+    // Update confidence based on provenance priority
+    const provenancePriority = { verified: 4, discovered: 3, user_provided: 3, identified: 2, inferred: 1 };
+    const newPriority = provenancePriority[provenance] || 0;
+    const currentPriority = provenancePriority[claim.provenance] || 0;
+    if (newPriority > currentPriority || (newPriority === currentPriority && confidence > claim.confidence)) {
+      claim.confidence = confidence;
+      claim.provenance = provenance;
+    }
+    
+    claim.updatedAt = new Date().toISOString();
+  }
+
+  /**
+   * Find claim by exact value match
+   */
+  _findClaimByValue(path, value) {
+    for (const claim of this.claimStore.values()) {
+      if (claim.fieldPath === path && claim.value === value) {
+        return claim.id;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Find claim by normalized value
+   */
+  _findClaimByNormalizedValue(path, normalizedValue) {
+    for (const claim of this.claimStore.values()) {
+      if (claim.fieldPath === path && claim.normalizedValue === normalizedValue) {
+        return claim;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Infer claim type from provenance and field
+   */
+  _inferClaimType(path, provenance) {
+    if (provenance === 'inferred') return 'inference';
+    if (path.startsWith('identity.description') || path.startsWith('identity.category')) {
+      return 'observation';
+    }
+    return 'fact';
+  }
+
+  /**
+   * Normalize value for claim comparison
+   */
+  _normalizeValueForClaim(path, value) {
+    if (value == null) return null;
+    if (typeof value === 'string') return value.trim().toLowerCase();
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
+  }
+
+  /**
+   * Infer source type from provider
+   */
+  _inferSourceType(provider) {
+    const typeMap = {
+      'geoapify': 'structured_provider',
+      'web_extraction': 'official_website',
+      'official_website': 'official_website',
+      'google_maps': 'structured_provider',
+      'user': 'user_provided',
+      'ai': 'ai_inference'
+    };
+    return typeMap[provider] || 'other';
+  }
+
+  /**
+   * Infer authority from provider
+   */
+  _inferAuthority(provider) {
+    const authorityMap = {
+      'official_website': 0.95,
+      'geoapify': 0.85,
+      'web_extraction': 0.8,
+      'google_maps': 0.75,
+      'user': 0.9,
+      'ai': 0.3
+    };
+    return authorityMap[provider] || 0.5;
   }
 
   get(path) {
