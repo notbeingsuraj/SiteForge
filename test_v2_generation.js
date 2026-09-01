@@ -10,6 +10,8 @@ import BusinessResearchService from './apps/api/src/services/BusinessResearchSer
 import BrandStrategyService from './apps/api/src/services/BrandStrategyService.js';
 import DigitalAuditService from './apps/api/src/services/DigitalAuditService.js';
 import DesignIntelligenceService from './apps/api/src/services/DesignIntelligenceService.js';
+
+const designIntelligenceService = new DesignIntelligenceService();
 import { config } from './apps/api/src/config/env.js';
 
 const testBusinesses = [
@@ -111,11 +113,11 @@ async function runTest() {
 
       // Step 4: Design Intelligence
       console.log('  4. Generating Design Intelligence...');
-      const designIntelligence = await DesignIntelligenceService.generateDesignIntelligence(
+      const designIntelligence = await designIntelligenceService.generateDesignIntelligence(
         business, brandDNA, digitalAudit,
         { skipAIDesign: true } // Use deterministic fallback
       );
-      const summary = DesignIntelligenceService.extractSummary(designIntelligence);
+      const summary = designIntelligenceService.extractSummary(designIntelligence);
       console.log(`     ✓ Layout: ${summary.layoutFamily} | Theme: ${summary.visualDirection} | Primary: ${summary.primaryColor}`);
       console.log(`     Sections: ${summary.sections.join(', ')}`);
       console.log(`     Hero Asset: ${summary.heroAsset} | Supporting: ${summary.supportingAssets}`);

@@ -422,7 +422,10 @@ class DesignIntelligenceService {
     };
     
     // Match category to typography system
-    if (cat.includes(key)) return typo;
+    for (const [key, typo] of Object.entries(typographySystems)) {
+      if (cat.includes(key)) return typo;
+    }
+    return typographySystems.default;
   }
 
   /**
