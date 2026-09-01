@@ -105,7 +105,7 @@ class WebsiteGenerationService {
         
         const brandDNA = await BrandStrategyService.generateBrandDNA(business);
         const digitalAudit = await DigitalAuditService.auditDigitalPresence(business);
-        designIntelligence = await DesignIntelligenceService.generateDesignIntelligence(
+        designIntelligence = await new DesignIntelligenceService().generateDesignIntelligence(
           business, brandDNA, digitalAudit, options
         );
       } catch (error) {

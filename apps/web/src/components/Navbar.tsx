@@ -12,7 +12,7 @@ export default function Navbar() {
       <div className="mx-auto flex max-w-[1180px] items-center justify-between gap-4 px-1 py-4">
         <div className="flex items-center gap-3 md:gap-4">
           <div className="lg:hidden">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#111111] text-sm font-semibold text-white">S</div>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#111111] text-sm font-semibold text-white">W</div>
           </div>
           <div className="hidden rounded-full border border-[#E5E5EA] bg-white px-3 py-2 text-sm text-[#6E6E73] md:flex md:items-center md:gap-2">
             <Search className="h-4 w-4" />

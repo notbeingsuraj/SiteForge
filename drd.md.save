@@ -240,7 +240,7 @@ EXTRACTION ▸ BRAND STRATEGY ▸ WEBSITE STRATEGY ▸ LANDING PAGE SPEC ▸ VAL
 - ❌ State contamination
 - ❌ External API failure
 
-SiteForge intentionally **validates** generated structures rather than
+Webloom intentionally **validates** generated structures rather than
 blindly trusting them:
 
 ```
@@ -352,7 +352,7 @@ git push origin feature/your-feature
 [✓] State isolation testing
 ```
 
-SiteForge is an **active engineering project** — not a finished SaaS
+Webloom is an **active engineering project** — not a finished SaaS
 pretending to be one.
 
 <br>
