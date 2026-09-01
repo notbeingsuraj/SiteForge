@@ -1068,4 +1068,4 @@ class DesignIntelligenceService {
   }
 }
 
-export default new DesignIntelligenceService();
+export default DesignIntelligenceService;
