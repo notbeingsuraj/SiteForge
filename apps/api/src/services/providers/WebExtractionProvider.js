@@ -6,7 +6,7 @@
  * drop-in fallback inside the provider abstraction.
  *
  * This is LEVEL 3 in the data priority (after deterministic hints and a
- * structured provider like Geoapify). It preserves all existing SiteForge
+ * structured provider like Geoapify). It preserves all existing Webloom
  * extraction/fallback behavior and returns data in the same canonical flat
  * profile shape the rest of the pipeline consumes.
  */

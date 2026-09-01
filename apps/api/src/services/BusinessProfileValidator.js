@@ -63,7 +63,7 @@ function isValidWebsite(v) {
  * Validate a canonical business-profile-shaped object.
  *
  * Accepts both the "flat" canonical shape (business/contact/location/ratings)
- * used throughout SiteForge AND the BusinessProfile.toObject() shape
+ * used throughout Webloom AND the BusinessProfile.toObject() shape
  * (identity.name, contact.phone, location.full_address, ratings.rating, ...).
  *
  * @param {Object} profile
@@ -73,7 +73,7 @@ export function validateBusinessProfile(profile) {
   const issues = [];
   const profileObj = profile && typeof profile === 'object' ? profile : {};
 
-  // Support canonical shapes (tolerant read). SiteForge has several:
+  // Support canonical shapes (tolerant read). Webloom has several:
   //   - flat canonical shape: business.name / contact.phone / location.full_address
   //   - nested BusinessProfile.data shape: identity.name.{value,..}
   //   - flattened dotted-path shape (BusinessProfile.toObject):

@@ -353,7 +353,7 @@ class AssetGenerationService {
           font-size="${Math.max(12, width / 80)}"
           fill="${colors.mutedText || colors.text}" opacity="0.5"
           font-style="italic">
-      SiteForge • Generated placeholder • Replace with real imagery
+      Webloom • Generated placeholder • Replace with real imagery
     </text>
   </g>
 </svg>`;

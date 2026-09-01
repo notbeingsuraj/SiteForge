@@ -36,7 +36,7 @@ export const config = {
   extraction: {
     timeout: parseInt(process.env.EXTRACTION_TIMEOUT_MS) || 15000,
     maxRetries: parseInt(process.env.EXTRACTION_MAX_RETRIES) || 2,
-    userAgent: 'SiteForge/1.0 (+https://siteforge.app)',
+    userAgent: 'Webloom/1.0 (+https://webloom.dev)',
   },
   geoapify: {
     apiKey: process.env.GEOAPIFY_API_KEY || null,

@@ -1057,9 +1057,28 @@ class DesignIntelligenceService {
     return true;
   }
 
-  extractSummary(intelligence) {
+  static extractSummary(intelligence) {
+    // Guard: handle missing or malformed intelligence gracefully
+    if (!intelligence) return null;
+    const pa = intelligence.pageArchitecture || {};
+    const ds = intelligence.designSystem || {};
+    const ap = intelligence.assetPlan || {};
+    const cs = intelligence.contentStrategy || {};
+    const sections = Array.isArray(pa.sections)
+      ? pa.sections.map(s => (typeof s === 'string' ? s : s?.id)).filter(Boolean)
+      : [];
     return {
-      layoutFamily: intelligence.pageArchitecture.layoutFamily,
+      layoutFamily: pa.layoutFamily || null,
+      visualDirection: ds.visualDirection || null,
+      primaryColor: ds.colorSystem?.primary || null,
+      typography: ds.typography
+        ? `${ds.typography.display?.family || ''} / ${ds.typography.body?.family || ''}`
+        : null,
+      sections,
+      heroAsset: ap.hero?.type || null,
+      supportingAssets: Array.isArray(ap.supporting) ? ap.supporting.length : 0,
+      primaryCTA: cs.hero?.cta?.primary || null,
+    };
       visualDirection: intelligence.designSystem.visualDirection,
       primaryColor: intelligence.designSystem.colorSystem.primary,
       typography: `${intelligence.designSystem.typography.display.family} / ${intelligence.designSystem.typography.body.family}`,

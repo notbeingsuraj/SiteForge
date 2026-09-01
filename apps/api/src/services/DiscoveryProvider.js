@@ -4,10 +4,10 @@
  * Abstract interface for source-agnostic business website discovery.
  * 
  * The purpose of this abstraction is to allow different discovery
- * mechanisms to be plugged in without coupling SiteForge to any
+ * mechanisms to be plugged in without coupling Webloom to any
  * single search provider (e.g., Bing, DuckDuckGo, Brave, etc.).
  * 
- * IMPORTANT: This is intentionally NOT Google-specific. SiteForge
+ * IMPORTANT: This is intentionally NOT Google-specific. Webloom
  * has ZERO dependency on Google for business-data discovery.
  * Google Maps URLs are only used as input identifiers.
  * 

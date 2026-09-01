@@ -63,7 +63,7 @@ const testBusinesses = [
 ];
 
 async function runTest() {
-  console.log('=== SITEFORGE V2 GENERATION TEST ===\n');
+  console.log('=== WEBLOOM V2 GENERATION TEST ===\n');
   console.log(`Testing ${testBusinesses.length} businesses...\n`);
 
   const results = [];
@@ -89,7 +89,7 @@ async function runTest() {
       const business = research.intelligence;
       console.log(`     ✓ ${business.identity.name} | ${business.identity.category} | phone: ${business.contact?.phone ? 'yes' : 'no'} | web: ${business.contact?.website ? 'yes' : 'no'}`);
 
-      // Step 2: Brand DNA
+      // Step 2: Brand DNA (skip AI when using deterministic fallback)
       console.log('  2. Generating Brand DNA...');
       let brandDNA;
       try {
@@ -100,7 +100,7 @@ async function runTest() {
         brandDNA = { brandPersonality: ['professional', 'trustworthy'] };
       }
 
-      // Step 3: Digital Audit
+      // Step 3: Digital Audit (skip AI when using deterministic fallback)
       console.log('  3. Running Digital Audit...');
       let digitalAudit;
       try {

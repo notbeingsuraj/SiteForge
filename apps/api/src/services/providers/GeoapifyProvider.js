@@ -5,7 +5,7 @@
  * Handles:
  *  - searching for businesses (text + coordinates)
  *  - retrieving useful place information
- *  - mapping Geoapify responses into SiteForge's canonical profile (via ProviderAdapter)
+ *  - mapping Geoapify responses into Webloom's canonical profile (via ProviderAdapter)
  *  - API errors, empty results, rate limits, timeouts, malformed responses
  *  - normalization and safe logging (never exposes the API key)
  *

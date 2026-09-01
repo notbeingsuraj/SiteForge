@@ -113,7 +113,7 @@ export default function GeneratedSites() {
               Local websites, generated from verified facts.
             </h1>
             <p className="mt-3 max-w-2xl text-base text-[#6E6E73]">
-              Paste a Google Maps URL. SiteForge analyzes the business, then renders a polished local website from the
+              Paste a Google Maps URL. Webloom analyzes the business, then renders a polished local website from the
               verified profile — no fabricated phone numbers, addresses, or reviews.
             </p>
           </div>

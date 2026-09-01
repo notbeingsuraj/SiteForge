@@ -1,4 +1,4 @@
-# SiteForge
+# Webloom
 
 ## Detailed Requirements Document
 
@@ -91,7 +91,7 @@ Do not hard-code your application to one model provider.
 Recommended:
 
 ```text
-siteforge/
+webloom/
 │
 ├── apps/
 │   ├── web/
@@ -260,7 +260,7 @@ The AI controls **content and configuration**, while your application controls *
 
 # 8. Data Models (In-Memory / Stateless)
 
-Since SiteForge is now a stateless application with no database persistence, the following data structures represent the in-memory objects used during request processing. They are not persisted between requests.
+Since Webloom is now a stateless application with no database persistence, the following data structures represent the in-memory objects used during request processing. They are not persisted between requests.
 
 ## Lead (Transient)
 

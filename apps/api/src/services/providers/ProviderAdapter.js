@@ -1,7 +1,7 @@
 /**
  * ProviderAdapter
  *
- * Boundary between provider-specific response structures and SiteForge's
+ * Boundary between provider-specific response structures and Webloom's
  * canonical business-data format.
  *
  * The rest of the application must NOT see Geoapify-specific fields
@@ -140,10 +140,10 @@ export function mapGeoapifyFeatureToProfile(feature) {
 
 /**
  * Normalize Geoapify opening_hours (either day->range map or array form)
- * into SiteForge's canonical { monday..sunday } map.
+ * into Webloom's canonical { monday..sunday } map.
  */
 /**
- * Normalize Geoapify opening_hours into SiteForge's canonical
+ * Normalize Geoapify opening_hours into Webloom's canonical
  * { monday..sunday } map. Accepts three shapes:
  *   - string "Mo-Su 07:30-18:00"            (place-details format)
  *   - day->range map { monday: "09:00-17:00" } (places / geocode format)
@@ -246,7 +246,7 @@ export function expandDayToken(token) {
 
 /**
  * Extract deterministic (LEVEL 1) hints from raw input — business name,
- * city/locality, and coordinates that SiteForge already has from a
+ * city/locality, and coordinates that Webloom already has from a
  * Google Maps URL or user input. These are used to seed Geoapify search.
  *
  * @param {Object} input - { googleMapsUrl?, name?, city?, state?, country?, latitude?, longitude? }

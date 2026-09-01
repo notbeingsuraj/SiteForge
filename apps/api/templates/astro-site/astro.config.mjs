@@ -1,4 +1,4 @@
-// SiteForge generated-site Astro configuration.
+// Webloom generated-site Astro configuration.
 // The site is built as a fully static site (SSG) — no server runtime needed for
 // the generated pages themselves. This keeps generated sites fast, deterministic,
 // and trivially servable from the static `dist/` output on a local port.

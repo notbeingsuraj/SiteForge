@@ -1,4 +1,4 @@
-# SITEFORGE — WEBSITE GENERATION ARCHITECTURE REPORT (READ-ONLY)
+# WEBLOOM — WEBSITE GENERATION ARCHITECTURE REPORT (READ-ONLY)
 
 > Design pass only. No files modified, no packages installed, no servers started, nothing committed.
 > Goal: personal, local-only generation of a real, browser-viewable website from a Google Maps URL.
@@ -7,12 +7,12 @@
 
 ## 1. EXISTING ARCHITECTURE
 
-The repository is an npm workspace (`siteforge`):
+The repository is an npm workspace (`webloom`):
 ```
 package.json                 # workspaces: ["apps/*","packages/*"]; scripts dev:api / dev:web
 apps/
-  api/    # Node + Express ESM backend (@siteforge/api), port 5001
-  web/    # React 18 + Vite 5 + TS + Tailwind control-panel UI (@siteforge/web), port 5173
+  api/    # Node + Express ESM backend (@webloom/api), port 5001
+  web/    # React 18 + Vite 5 + TS + Tailwind control-panel UI (@webloom/web), port 5173
 packages/
   config/ # (empty of runtime logic in this space)
 ```
@@ -73,7 +73,7 @@ To go from `BusinessProfile → real local website`, the following do **not** ex
 5. **A backend route** — `POST /api/website/generate` (and control ops: `list`, `start`, `stop`, `delete`).
 6. **UI additions** — Dashboard actions: Generate → Open Website → Stop → Regenerate → Delete; the Browser opens `http://localhost:<port>`.
 7. **Port registry** — choose the next free local port per generated site.
-8. **State** — a simple on-disk manifest (`generated-sites/.siteforge.json` or per-site JSON) mapping site → slug → port → status. No database.
+8. **State** — a simple on-disk manifest (`generated-sites/.webloom.json` or per-site JSON) mapping site → slug → port → status. No database.
 
 ---
 
@@ -114,7 +114,7 @@ browser: http://localhost:<port>
 ```
 generated-sites/                                  # root for generated artifacts (gitignored)
   .gitignore
-  .siteforge.json                                  # manifest: { slug: { port, status, updatedAt } } (simple, no DB)
+  .webloom.json                                  # manifest: { slug: { port, status, updatedAt } } (simple, no DB)
 
 apps/api/src/services/WebsiteGenerationService.js   # orchestrator: strategy→code→disk
 apps/api/src/services/GeneratedSiteManager.js       # CRUD + port alloc + server start/stop (child_process)
@@ -219,8 +219,8 @@ A `GET /api/website/list` shows all generated sites with status/port; each has O
 - **Code safety:** Low — AI-authored config/scripts run `npm install`/`npm run dev`; more surface for injected/odd commands.
 - **Dev complexity:** High — need to validate/repair arbitrary projects.
 
-### OPTION 2 — SiteForge owns a reusable renderer/template; AI generates a **structured config** that drives it (RECOMMENDED)
-- SiteForge checks in ONE thin renderer project (Astro or Vite+React). The generator writes a **`site.config.json`** (theme tokens, sections with content, page order, CTA) derived from verified profile + strategy + copy + spec. The AI may (a) fill the config directly, and/or (b) emit fine-grained per-section `{component, props, styles}` blocks. The template's fixed components render that config.
+### OPTION 2 — Webloom owns a reusable renderer/template; AI generates a **structured config** that drives it (RECOMMENDED)
+- Webloom checks in ONE thin renderer project (Astro or Vite+React). The generator writes a **`site.config.json`** (theme tokens, sections with content, page order, CTA) derived from verified profile + strategy + copy + spec. The AI may (a) fill the config directly, and/or (b) emit fine-grained per-section `{component, props, styles}` blocks. The template's fixed components render that config.
 - **Reliability:** HIGH — framework/build are fixed and known-good; AI only produces config/JSON (or small scoped code blocks).
 - **Visual quality:** GOOD and consistent — themed components guarantee a coherent look with per-site color/type.
 - **Regeneration:** Excellent — editing `site.config.json` + restart/`vite dev` = clean regenerate; idempotent.
@@ -286,7 +286,7 @@ Expected output:
 ## 12. IMPLEMENTATION PLAN (PROPOSED — awaiting approval; no code written)
 
 **Phase W1 — Foundation (skeleton + storage)**
-- `.gitignore` add `generated-sites/`; root `generated-sites/.siteforge.json` manifest.
+- `.gitignore` add `generated-sites/`; root `generated-sites/.webloom.json` manifest.
 - `WebsiteGenerationService.js` + `GeneratedSiteManager.js` (port alloc, spawn/stop dev server, status).
 - `config/env.js`: `generatedSitesDir`, `websiteHost`, `websiteBasePort`.
 - `routes/website.js` + mount in `app.js`: `POST /generate`, `GET /list`, `POST /:slug/start|stop|regenerate`, `DELETE /:slug`.

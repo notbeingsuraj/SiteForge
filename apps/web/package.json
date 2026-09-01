@@ -1,7 +1,7 @@
 {
-  "name": "@siteforge/web",
+  "name": "@webloom/web",
   "version": "1.0.0",
-  "description": "SiteForge Frontend",
+  "description": "Webloom Frontend",
   "type": "module",
   "scripts": {
     "dev": "vite",

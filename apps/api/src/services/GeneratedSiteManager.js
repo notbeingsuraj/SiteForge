@@ -222,9 +222,9 @@ class GeneratedSiteManager {
       });
       server.listen(port, host, () => {
         // Signal readiness on fd 3 (used by the parent spawn with pipe).
-        process.stdout.write('SITEFORGE_SERVER_READY ' + port + '\\n');
+        process.stdout.write('WEBLOOM_SERVER_READY ' + port + '\n');
       });
-      server.on('error', (e) => { console.error('SITEFORGE_SERVER_ERROR ' + (e && e.message)); process.exit(1); });
+      server.on('error', (e) => { console.error('WEBLOOM_SERVER_ERROR ' + (e && e.message)); process.exit(1); });
       process.on('SIGTERM', () => server.close(() => process.exit(0)));
       process.on('SIGINT', () => server.close(() => process.exit(0)));
     `;
@@ -248,14 +248,14 @@ class GeneratedSiteManager {
       const timer = setTimeout(() => { if (!settled) { settled = true; reject(new Error(`Server child for "${slug}" did not become ready on port ${port}`)); } }, 5000);
       child.stdout.on('data', (d) => {
         const line = String(d);
-        if (line.includes('SITEFORGE_SERVER_READY') && !settled) {
+        if (line.includes('WEBLOOM_SERVER_READY') && !settled) {
           settled = true; clearTimeout(timer); resolve();
         }
       });
       child.stderr.on('data', (d) => {
         const line = String(d);
-        if (line.includes('SITEFORGE_SERVER_ERROR') && !settled) {
-          settled = true; clearTimeout(timer); reject(new Error(line.slice('SITEFORGE_SERVER_ERROR'.length).trim()));
+        if (line.includes('WEBLOOM_SERVER_ERROR') && !settled) {
+          settled = true; clearTimeout(timer); reject(new Error(line.slice('WEBLOOM_SERVER_ERROR'.length).trim()));
         }
       });
       child.on('exit', (code) => {

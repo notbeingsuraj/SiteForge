@@ -658,7 +658,7 @@ class BusinessResearchService {
   }
 
   /**
-   * Convert a canonical BusinessProfile into the SiteForge "intelligence" shape
+   * Convert a canonical BusinessProfile into the Webloom "intelligence" shape
    * (same shape produced by extractBusinessIntelligence) so downstream
    * consumers (BrandStrategyService, WebsiteStrategy, etc.) are unchanged.
    */

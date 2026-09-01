@@ -57,7 +57,7 @@ app.use('/api/website', websiteRoutes);
 // API info endpoint
 app.get('/api', (req, res) => {
   res.json({
-    name: 'SiteForge API',
+    name: 'Webloom API',
     version: '1.0.0',
     description: 'Stateless backend for business intelligence and website generation',
     endpoints: {

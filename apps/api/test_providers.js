@@ -1,5 +1,5 @@
 /**
- * SiteForge — Geoapify Provider Integration Tests
+ * Webloom — Geoapify Provider Integration Tests
  *
  * Covers the 11 backlog scenarios from the Geoapify integration spec:
  *   1. Valid business search (Geoapify returns structured data)

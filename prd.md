@@ -1,9 +1,9 @@
-# SiteForge
+# Webloom
 
 ## Product Requirements Document
 
 **Version:** 1.0
-**Product Type:** Internal Sales & Website Generation Platform
+**Product Type:** AI Website Intelligence Platform
 **Stack:** MERN
 **Primary AI Interface:** OmniRoute
 **AI Coding Agents:** Cline + Kiro AI
@@ -12,11 +12,11 @@
 
 ## 1. Executive Summary
 
-SiteForge is an internal web application designed to help a website-development business identify local businesses that have weak or outdated digital presences and rapidly produce sales-ready website concepts.
+Webloom is an AI-powered website intelligence platform designed to help a website-development business identify local businesses with weak or outdated digital presences and rapidly produce sales-ready website concepts.
 
 The user submits a Google Maps business URL.
 
-SiteForge analyses the available business information and produces:
+Webloom analyses the available business information and produces:
 
 * Business profile
 * Business category
@@ -56,7 +56,7 @@ Local businesses frequently have:
 
 Manually researching these businesses and creating personalized website proposals is slow.
 
-SiteForge reduces this workflow from:
+Webloom reduces this workflow from:
 
 **Research → Analyse → Design → Write proposal → Contact**
 

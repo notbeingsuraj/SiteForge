@@ -8,7 +8,7 @@ async function test() {
     const response = await axios.get(proxyUrl, {
       timeout: 15000,
       headers: {
-        'User-Agent': 'SiteForge/1.0 (+https://siteforge.app)',
+        'User-Agent': 'Webloom/1.0 (+https://webloom.dev)',
       },
     });
     

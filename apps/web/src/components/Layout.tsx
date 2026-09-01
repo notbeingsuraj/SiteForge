@@ -12,7 +12,7 @@ export default function Layout() {
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#111111] text-sm font-semibold text-white">S</div>
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-[#6E6E73]">SiteForge</p>
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-[#6E6E73]">Webloom</p>
                   <p className="text-sm font-medium text-[#111111]">Pipeline</p>
                 </div>
               </div>

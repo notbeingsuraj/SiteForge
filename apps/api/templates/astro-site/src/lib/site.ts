@@ -1,5 +1,5 @@
-// SiteForge generated-site config library (V2).
-// The SiteForge WebsiteGenerationService writes src/data/site.config.json
+// Webloom generated-site config library (V2).
+// The Webloom WebsiteGenerationService writes src/data/site.config.json
 // from a verified BusinessProfile + Design Intelligence. This module reads it 
 // and exposes typed helpers that the deterministic Astro components use to render.
 

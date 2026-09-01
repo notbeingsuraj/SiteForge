@@ -6,10 +6,10 @@
  * BusinessResearchService consumes NORMALIZED business data through this
  * abstraction rather than depending on any single provider's raw response
  * shape. Concrete providers must map their provider-specific responses into
- * SiteForge's canonical business-data format (see ProviderAdapter).
+ * Webloom's canonical business-data format (see ProviderAdapter).
  *
  * Providers must:
- * - Return normalized business data (SiteForge canonical flat profile shape)
+ * - Return normalized business data (Webloom canonical flat profile shape)
  * - Preserve field-level provenance + confidence
  * - Never reveal credentials / secrets in errors or logs
  * - Fail gracefully (return { available:false } / null) rather than crash
