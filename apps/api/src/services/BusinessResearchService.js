@@ -15,6 +15,7 @@ import { config } from '../config/env.js';
 import { calculateMatchScore } from './EntityResolution.js';
 import { initializeDatabase, getDb } from '../db/client.js';
 import { IdentityRepository, NotFoundError, DuplicateError, ValidationError } from '../db/IdentityRepository.js';
+import { CanonicalizationService } from './CanonicalizationService.js';
 
 class BusinessResearchService {
   /**
@@ -727,6 +728,38 @@ class BusinessResearchService {
       if (entityId) {
         profile.setEntityId(entityId);
       }
+
+      // PHASE 4: Canonicalization - Process observations to build canonical business intelligence
+      try {
+        const canonicalizationService = new CanonicalizationService(this.db);
+        
+        // Process each observation through canonicalization
+        for (const obs of observations) {
+          if (obs.record && entityId) {
+            const sourceInfo = {
+              sourceUrl: sourceUrl || obs.record?.metadata?.sourceUrl,
+              provider: obs.provider,
+              providerRecordId: obs.providerRecordId
+            };
+            
+            const canonicalizationResult = await canonicalizationService.processObservation({
+              entityId,
+              provider: obs.provider,
+              providerRecordId: obs.providerRecordId,
+              record: obs.record,
+              sourceInfo: { sourceUrl },
+              confidence: 0.8
+            });
+            
+            // Log canonicalization results
+            if (config?.debugBusinessAnalysis) {
+              console.log(`[Canonicalization] Entity ${entityId}: ${canonicalizationResult.canonicalizedFields.length} fields canonicalized, ${canonicalizationResult.conflictsDetected.length} conflicts, ${canonicalizationResult.provenanceUpgrades.length} provenance upgrades`);
+            }
+          }
+        } catch (canonErr) {
+          // Canonicalization failure must not break the research pipeline
+          console.error(`[Canonicalization] Failed (best-effort): ${canonErr?.message || String(canonErr)}`);
+        }
 
       return {
         status: 'ok',

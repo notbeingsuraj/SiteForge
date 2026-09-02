@@ -1,20 +1,29 @@
 /**
- * Database Schema — Phase 1: Persistent Business Identity Layer
+ * Database Schema — Phase 1 + Phase 4: Persistent Business Identity + Canonical Business Intelligence
  * 
  * Core entities for durable business identity:
  * - BusinessEntity: canonical business identity
  * - ProviderIdentity: maps provider records to persistent entities
  * - ResolutionRecord: historical entity resolution decisions
  * 
+ * Phase 4 Canonical Business Intelligence entities:
+ * - CanonicalField: canonical field values with provenance and confidence
+ * - Observation: provider observations with full provenance
+ * - CanonicalizationDecision: canonicalization decisions and conflict resolutions
+ * - Source: source of information with authority
+ * - Evidence: evidence supporting a claim
+ * - Claim: claim about a business field with evidence
+ * - Conflict: conflict between claims on the same field
+ * 
  * Uses Drizzle ORM with SQLite (better-sqlite3).
  * This is a schema-only module; no business logic is integrated yet.
  */
 
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, index } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // =============================================================================
-// BusinessEntity — Durable canonical business identity
+// Phase 1: BusinessEntity — Durable canonical business identity
 // =============================================================================
 export const BusinessEntity = sqliteTable('business_entity', {
   entityId: text('entity_id').primaryKey(),
@@ -31,7 +40,7 @@ export const BusinessEntity = sqliteTable('business_entity', {
 });
 
 // =============================================================================
-// ProviderIdentity — Maps provider records to persistent entities
+// Phase 1: ProviderIdentity — Maps provider records to persistent entities
 // =============================================================================
 export const ProviderIdentity = sqliteTable('provider_identity', {
   id: text('id').primaryKey(),
@@ -51,7 +60,7 @@ export const ProviderIdentity = sqliteTable('provider_identity', {
 }));
 
 // =============================================================================
-// ResolutionRecord — Historical entity resolution decisions
+// Phase 1: ResolutionRecord — Historical entity resolution decisions
 // =============================================================================
 export const ResolutionRecord = sqliteTable('resolution_record', {
   id: text('id').primaryKey(),
@@ -69,6 +78,182 @@ export const ResolutionRecord = sqliteTable('resolution_record', {
 });
 
 // =============================================================================
+// Phase 4: Source — Origin of information
+// =============================================================================
+export const Source = sqliteTable('source', {
+  id: text('id').primaryKey(),
+  url: text('url'),
+  domain: text('domain'),
+  provider: text('provider'),
+  sourceType: text('source_type').notNull().default('other'), // 'official_website', 'structured_provider', 'search_result', 'directory', 'review_platform', 'news', 'social', 'user_provided', 'ai_inference', 'other'
+  authority: real('authority').notNull().default(0.5), // 0-1
+  isPrimary: integer('is_primary', { mode: 'boolean' }).notNull().default(false),
+  retrievedAt: text('retrieved_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  publishedAt: text('published_at'),
+  updatedAt: text('updated_at'),
+  metadata: text('metadata', { mode: 'json' }), // JSON string
+}, (table) => ({
+  domainIdx: index('source_domain_idx').on(table.domain),
+  providerIdx: index('source_provider_idx').on(table.provider),
+}));
+
+// =============================================================================
+// Phase 4: Evidence — Supporting material extracted from a source
+// =============================================================================
+export const Evidence = sqliteTable('evidence', {
+  id: text('id').primaryKey(),
+  sourceId: text('source_id').notNull().references(() => Source.id, { onDelete: 'cascade' }),
+  fieldPath: text('field_path').notNull(), // e.g., 'identity.name', 'contact.phone'
+  value: text('value').notNull(),
+  excerpt: text('excerpt'),
+  location: text('location', { mode: 'json' }), // { xpath, cssSelector, lineNumber, charOffset }
+  extractedAt: text('extracted_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  extractionMethod: text('extraction_method').notNull().default('unknown'), // 'schema.org', 'microdata', 'openGraph', 'visibleText', 'aiExtraction', 'apiResponse'
+  metadata: text('metadata', { mode: 'json' }),
+}, (table) => ({
+  sourceIdx: index('evidence_source_idx').on(table.sourceId),
+  fieldIdx: index('evidence_field_idx').on(table.fieldPath),
+}));
+
+// =============================================================================
+// Phase 4: Claim — Statement about a business field with evidence
+// =============================================================================
+export const Claim = sqliteTable('claim', {
+  id: text('id').primaryKey(),
+  entityId: text('entity_id').notNull().references(() => BusinessEntity.entityId, { onDelete: 'cascade' }),
+  fieldPath: text('field_path').notNull(),
+  value: text('value').notNull(),
+  normalizedValue: text('normalized_value'),
+  claimType: text('claim_type').notNull().default('fact'), // 'fact', 'observation', 'inference'
+  confidence: real('confidence').notNull().default(0.5),
+  verificationStatus: text('verification_status').notNull().default('unverified'), // 'verified', 'supported', 'unverified', 'conflicted', 'refuted'
+  temporalRetrievedAt: text('temporal_retrieved_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  temporalPublishedAt: text('temporal_published_at'),
+  temporalObservedAt: text('temporal_observed_at'),
+  temporalLastVerifiedAt: text('temporal_last_verified_at'),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  entityIdx: index('claim_entity_idx').on(table.entityId),
+  fieldIdx: index('claim_field_idx').on(table.fieldPath),
+  entityFieldIdx: index('claim_entity_field_idx').on(table.entityId, table.fieldPath),
+}));
+
+// =============================================================================
+// Phase 4: ClaimSource — Links claims to sources
+// =============================================================================
+export const ClaimSource = sqliteTable('claim_source', {
+  id: text('id').primaryKey(),
+  claimId: text('claim_id').notNull().references(() => Claim.id, { onDelete: 'cascade' }),
+  sourceId: text('source_id').notNull().references(() => Source.id, { onDelete: 'cascade' }),
+  confidence: real('confidence').notNull().default(0.5),
+  isPrimary: integer('is_primary', { mode: 'boolean' }).notNull().default(false),
+}, (table) => ({
+  claimIdx: index('claim_source_claim_idx').on(table.claimId),
+  sourceIdx: index('claim_source_source_idx').on(table.sourceId),
+}));
+
+// =============================================================================
+// Phase 4: ClaimEvidence — Links claims to evidence
+// =============================================================================
+export const ClaimEvidence = sqliteTable('claim_evidence', {
+  id: text('id').primaryKey(),
+  claimId: text('claim_id').notNull().references(() => Claim.id, { onDelete: 'cascade' }),
+  evidenceId: text('evidence_id').notNull().references(() => Evidence.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  claimIdx: index('claim_evidence_claim_idx').on(table.claimId),
+  evidenceIdx: index('claim_evidence_evidence_idx').on(table.evidenceId),
+}));
+
+// =============================================================================
+// Phase 4: Conflict — Disagreement between claims on the same field
+// =============================================================================
+export const Conflict = sqliteTable('conflict', {
+  id: text('id').primaryKey(),
+  entityId: text('entity_id').notNull().references(() => BusinessEntity.entityId, { onDelete: 'cascade' }),
+  fieldPath: text('field_path').notNull(),
+  values: text('values', { mode: 'json' }).notNull(), // Array of { value, source, provider, provenance, confidence, sourceId, claimId }
+  status: text('status', { enum: ['conflicted', 'resolved', 'dismissed'] }).notNull().default('conflicted'),
+  resolutionStrategy: text('resolution_strategy'), // 'authority_wins', 'most_recent', 'highest_confidence', 'manual_review', 'preserve_all'
+  resolutionReason: text('resolution_reason'),
+  resolvedAt: text('resolved_at'),
+  resolvedBy: text('resolved_by'),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  entityIdx: index('conflict_entity_idx').on(table.entityId),
+  fieldIdx: index('conflict_field_idx').on(table.fieldPath),
+  statusIdx: index('conflict_status_idx').on(table.status),
+}));
+
+// =============================================================================
+// Phase 4: CanonicalField — Canonical field values with provenance
+// =============================================================================
+export const CanonicalField = sqliteTable('canonical_field', {
+  id: text('id').primaryKey(),
+  entityId: text('entity_id').notNull().references(() => BusinessEntity.entityId, { onDelete: 'cascade' }),
+  fieldPath: text('field_path').notNull(),
+  value: text('value').notNull(),
+  provenance: text('provenance').notNull(), // 'verified', 'discovered', 'identified', 'user_provided', 'inferred'
+  confidence: real('confidence').notNull(),
+  sourceId: text('source_id').references(() => Source.id, { onDelete: 'set null' }),
+  claimId: text('claim_id').references(() => Claim.id, { onDelete: 'set null' }),
+  resolvedAt: text('resolved_at'),
+  supersededAt: text('superseded_at'),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  entityIdx: index('canonical_field_entity_idx').on(table.entityId),
+  fieldIdx: index('canonical_field_field_idx').on(table.fieldPath),
+  entityFieldIdx: index('canonical_field_entity_field_idx').on(table.entityId, table.fieldPath),
+}));
+
+// =============================================================================
+// Phase 4: Observation — Provider observations with full provenance
+// =============================================================================
+export const Observation = sqliteTable('observation', {
+  id: text('id').primaryKey(),
+  entityId: text('entity_id').notNull().references(() => BusinessEntity.entityId, { onDelete: 'cascade' }),
+  provider: text('provider').notNull(),
+  providerRecordId: text('provider_record_id'),
+  fieldPath: text('field_path').notNull(),
+  value: text('value').notNull(),
+  normalizedValue: text('normalized_value'),
+  provenance: text('provenance').notNull(),
+  confidence: real('confidence').notNull(),
+  sourceId: text('source_id').references(() => Source.id, { onDelete: 'set null' }),
+  claimId: text('claim_id').references(() => Claim.id, { onDelete: 'set null' }),
+  observedAt: text('observed_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  entityIdx: index('observation_entity_idx').on(table.entityId),
+  providerIdx: index('observation_provider_idx').on(table.provider),
+  fieldIdx: index('observation_field_idx').on(table.fieldPath),
+  entityFieldIdx: index('observation_entity_field_idx').on(table.entityId, table.fieldPath),
+}));
+
+// =============================================================================
+// Phase 4: CanonicalizationDecision — Canonicalization decisions and conflict resolutions
+// =============================================================================
+export const CanonicalizationDecision = sqliteTable('canonicalization_decision', {
+  id: text('id').primaryKey(),
+  entityId: text('entity_id').notNull().references(() => BusinessEntity.entityId, { onDelete: 'cascade' }),
+  fieldPath: text('field_path').notNull(),
+  decisionType: text('decision_type').notNull(), // 'accepted', 'rejected', 'superseded', 'conflict_resolved'
+  chosenValue: text('chosen_value'),
+  rejectedValue: text('rejected_value'),
+  reason: text('reason'),
+  strategy: text('strategy'), // 'authority_wins', 'most_recent', 'highest_confidence', 'manual_review', 'preserve_all', 'provenance_upgrade'
+  confidence: real('confidence'),
+  conflictId: text('conflict_id').references(() => Conflict.id, { onDelete: 'set null' }),
+  claimId: text('claim_id').references(() => Claim.id, { onDelete: 'set null' }),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  entityIdx: index('canonicalization_entity_idx').on(table.entityId),
+  fieldIdx: index('canonicalization_field_idx').on(table.fieldPath),
+}));
+
+// =============================================================================
 // Schema Validation
 // =============================================================================
 export function validateSchema() {
@@ -84,5 +269,14 @@ export default {
   BusinessEntity,
   ProviderIdentity,
   ResolutionRecord,
+  Source,
+  Evidence,
+  Claim,
+  ClaimSource,
+  ClaimEvidence,
+  Conflict,
+  CanonicalField,
+  Observation,
+  CanonicalizationDecision,
   validateSchema,
 };
