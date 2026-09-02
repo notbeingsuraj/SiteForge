@@ -12,6 +12,7 @@ import WebExtractionProvider from './providers/WebExtractionProvider.js';
 import { extractDeterministicHints } from './providers/ProviderAdapter.js';
 import { validateBusinessProfile, sanitizeFieldValue } from './BusinessProfileValidator.js';
 import { config } from '../config/env.js';
+import { calculateMatchScore } from './EntityResolution.js';
 
 class BusinessResearchService {
   /**
@@ -425,8 +426,52 @@ class BusinessResearchService {
       if (webResult.status === 'ok' && webResult.records.length > 0) {
         const webRecord = webResult.records[0];
         providerTrace.webExtraction = 'ok';
-        // Merge web-derived data but never overwrite higher-confidence Geoapify data.
-        this._mergeCanonical(profile, webRecord, 'discovered', 'web_extraction', sourceUrl, /* onlyIfMissing= */ !!geoapifyRecord);
+        
+        // When both Geoapify and web-extraction records exist, use Entity Resolution
+        // to determine if they represent the same business before merging.
+        if (geoapifyRecord) {
+          try {
+            const matchResult = calculateMatchScore(geoapifyRecord, webRecord);
+            const resolutionInfo = {
+              score: parseFloat(matchResult.score.toFixed(2)),
+              matchType: matchResult.matchType,
+              signals: Object.keys(matchResult.signals).filter(k => matchResult.signals[k] === true),
+              contradictions: matchResult.contradictions.map(c => c.field),
+            };
+            
+            if (config?.debugBusinessAnalysis) {
+              console.log(`[EntityResolution] geoapify vs web_extraction: score=${resolutionInfo.score}, matchType=${resolutionInfo.matchType}`);
+            }
+            
+            // Decide merge behavior based on entity resolution result
+            if (matchResult.matchType === 'same_entity') {
+              // Confident match: normal merge behavior with onlyIfMissing=true to preserve Geoapify
+              this._mergeCanonical(profile, webRecord, 'discovered', 'web_extraction', sourceUrl, /* onlyIfMissing= */ true, resolutionInfo);
+            } else if (matchResult.matchType === 'uncertain') {
+              // Uncertain match: very conservative merge (only fill true gaps)
+              this._mergeCanonical(profile, webRecord, 'discovered', 'web_extraction', sourceUrl, /* onlyIfMissing= */ true, resolutionInfo);
+            } else if (matchResult.matchType === 'different_entity') {
+              // Different entities: prevent blindly merging conflicting data
+              // Only merge non-identity fields that have no contradictions
+              if (config?.debugBusinessAnalysis) {
+                console.warn(`[EntityResolution] Records appear to be different entities; skipping aggressive merge`);
+              }
+              this._mergeConservativelyForDifferentEntities(profile, webRecord, sourceUrl, resolutionInfo);
+            }
+            
+            // Store resolution metadata on profile for observability
+            profile._entityResolutionTrace = profile._entityResolutionTrace || [];
+            profile._entityResolutionTrace.push(resolutionInfo);
+          } catch (err) {
+            // Entity Resolution failure must not crash the pipeline
+            console.error(`[EntityResolution] Matching failed (best-effort): ${err?.message || String(err)}`);
+            // Fall back to conservative merge
+            this._mergeCanonical(profile, webRecord, 'discovered', 'web_extraction', sourceUrl, /* onlyIfMissing= */ true);
+          }
+        } else {
+          // No Geoapify record: merge web-extraction normally
+          this._mergeCanonical(profile, webRecord, 'discovered', 'web_extraction', sourceUrl, /* onlyIfMissing= */ false);
+        }
       } else {
         providerTrace.webExtraction = webResult.status;
       }
@@ -489,8 +534,9 @@ class BusinessResearchService {
    * @param {string} providerLabel - 'geoapify' | 'web_extraction'
    * @param {string|null} sourceUrl
    * @param {boolean} onlyIfMissing - if true, do not overwrite existing values
+   * @param {Object} resolutionInfo - (optional) Entity Resolution match result metadata
    */
-  _mergeCanonical(profile, record, provenance, providerLabel, sourceUrl, onlyIfMissing = false) {
+  _mergeCanonical(profile, record, provenance, providerLabel, sourceUrl, onlyIfMissing = false, resolutionInfo = null) {
     if (!record || typeof record !== 'object') return;
 
     const sourceInfo = { sourceUrl: sourceUrl || undefined };
@@ -558,10 +604,46 @@ class BusinessResearchService {
   }
 
   /**
-   * AI enrichment of missing/incomplete fields. Only fills gaps; never
-   * overwrites high-confidence structured data already in the profile.
+   * Conservative merge for records identified as potentially different entities.
+   * Only merges non-identity data (ratings, hours, amenities) that are unlikely to differ
+   * between unrelated businesses. Completely skips merging identity fields (name, category,
+   * address) that would conflict if these are truly different entities.
+   *
+   * @param {BusinessProfile} profile
+   * @param {Object} record - provider record
+   * @param {string|null} sourceUrl
+   * @param {Object} resolutionInfo - Entity Resolution metadata
    */
-  async _enrichMissingWithAI(profile, sourceUrl) {
+  _mergeConservativelyForDifferentEntities(profile, record, sourceUrl, resolutionInfo) {
+    if (!record || typeof record !== 'object') return;
+
+    const sourceInfo = { sourceUrl: sourceUrl || undefined };
+    const confidence = record.confidence || {};
+
+    // Only merge supplemental data that would not change business identity:
+    // - Hours (business hours can be supplementary)
+    // - Ratings/reviews (public data, non-identifying)
+    // DO NOT merge: name, address, phone, website, category, description
+
+    if (record.hours && Object.keys(record.hours).some((k) => record.hours[k])) {
+      const existingHours = profile.get('hours') || {};
+      if (Object.keys(existingHours).length === 0) {
+        // Only merge if profile has no hours yet
+        profile.set('hours', record.hours, 'discovered', 0.5, sourceInfo);
+      }
+    }
+
+    if (record.ratings) {
+      if (typeof record.ratings.rating === 'number' && profile.get('ratings.rating') == null) {
+        profile.set('ratings.rating', record.ratings.rating, 'discovered', 0.6, sourceInfo);
+      }
+      if (typeof record.ratings.review_count === 'number' && profile.get('ratings.review_count') == null) {
+        profile.set('ratings.review_count', record.ratings.review_count, 'discovered', 0.6, sourceInfo);
+      }
+    }
+  }
+
+  /**
     try {
       const { default: AIService } = await import('./AIService.js');
 
