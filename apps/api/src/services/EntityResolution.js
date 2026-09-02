@@ -309,29 +309,32 @@ export function calculateMatchScore(record1, record2) {
   };
 }
 
-export function fuzzySimilarity(str1, str2) {
-  if (!str1 || !str2) return 0;
-  const s1 = str1.toLowerCase().trim();
-  const s2 = str2.toLowerCase().trim();
-  if (s1 === s2) return 1.0;
-  
-  const longer = s1.length > s2.length ? s1 : s2;
-  const shorter = s1.length > s2.length ? s2 : s1;
-  if (longer.length === 0) return 1.0;
-  
-  const prefixLen = Math.min(3, shorter.length);
-  if (longer.startsWith(shorter.slice(0, prefixLen))) {
-    return 0.8 + 0.2 * (shorter.length / longer.length);
-  }
-  
-  const set1 = new Set(s1.split(''));
-  const set2 = new Set(s2.split(''));
-  const intersection = new Set([...set1].filter(x => set2.has(x)));
-  const union = new Set([...set1, ...set2]);
-  return intersection.size / union.size;
-}
+export const ENTITY_RESOLUTION_STATUS = Object.freeze({
+  UNRESOLVED: 'unresolved',
+  RESOLVED: 'resolved',
+  AMBIGUOUS: 'ambiguous',
+  CONFLICTED: 'conflicted',
+  CLOSED: 'closed',
+  RELOCATED: 'relocated',
+  RENAMED: 'renamed',
+  DUPLICATE: 'duplicate',
+});
 
-export function normalizePhone(phone) {
+export const ENTITY_MATCH_TYPE = Object.freeze({
+  SAME_ENTITY: 'same_entity',
+  SAME_BRAND_DIFFERENT_LOCATION: 'same_brand_different_location',
+  PARENT_SUBSIDIARY: 'parent_subsidiary',
+  FRANCHISE: 'franchise',
+  DIFFERENT_ENTITY: 'different_entity',
+  CLOSED_ENTITY: 'closed_entity',
+  RELOCATED_ENTITY: 'relocated_entity',
+  RENAMED_ENTITY: 'renamed_entity',
+  UNCERTAIN: 'uncertain',
+});
+
+export { fuzzySimilarity, normalizePhone, normalizeWebsite };
+
+export default {};
   if (!phone) return null;
   const digits = phone.replace(/[^\d+]/g, '');
   if (digits.startsWith('1') && digits.length === 11) {
