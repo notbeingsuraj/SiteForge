@@ -33,6 +33,11 @@ Thumbs.db
 # Testing
 coverage/
 
+# SQLite databases (runtime/test artifacts — never commit)
+*.db
+*.db-shm
+*.db-wal
+
 # Generated websites (local-only artifacts — never commit)
 generated-sites/
 

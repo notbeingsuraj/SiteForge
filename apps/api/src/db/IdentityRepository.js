@@ -11,7 +11,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { BusinessEntity, ProviderIdentity, ResolutionRecord } from './schema.js';
 
 // =============================================================================
@@ -129,12 +129,12 @@ export class IdentityRepository {
     }
 
     const updates = {};
-    if (patch.canonicalName !== undefined) updates.canonical_name = patch.canonicalName;
-    if (patch.canonicalPhone !== undefined) updates.canonical_phone = patch.canonicalPhone || null;
-    if (patch.canonicalWebsite !== undefined) updates.canonical_website = patch.canonicalWebsite || null;
-    if (patch.canonicalAddress !== undefined) updates.canonical_address = patch.canonicalAddress;
-    if (patch.canonicalLatitude !== undefined) updates.canonical_latitude = patch.canonicalLatitude ?? null;
-    if (patch.canonicalLongitude !== undefined) updates.canonical_longitude = patch.canonicalLongitude ?? null;
+    if (patch.canonicalName !== undefined) updates.canonicalName = patch.canonicalName;
+    if (patch.canonicalPhone !== undefined) updates.canonicalPhone = patch.canonicalPhone || null;
+    if (patch.canonicalWebsite !== undefined) updates.canonicalWebsite = patch.canonicalWebsite || null;
+    if (patch.canonicalAddress !== undefined) updates.canonicalAddress = patch.canonicalAddress;
+    if (patch.canonicalLatitude !== undefined) updates.canonicalLatitude = patch.canonicalLatitude ?? null;
+    if (patch.canonicalLongitude !== undefined) updates.canonicalLongitude = patch.canonicalLongitude ?? null;
     if (patch.category !== undefined) updates.category = patch.category || null;
     if (patch.status !== undefined) updates.status = patch.status;
 
@@ -142,7 +142,7 @@ export class IdentityRepository {
       return existing;
     }
 
-    updates.updated_at = new Date().toISOString();
+    updates.updatedAt = new Date().toISOString();
 
     this.db
       .update(BusinessEntity)
@@ -254,13 +254,13 @@ export class IdentityRepository {
     if (!existing) return null;
 
     const updates = {
-      last_seen: new Date().toISOString(),
+      lastSeen: new Date().toISOString(),
     };
     if (options.resolutionMethod !== undefined) {
-      updates.resolution_method = options.resolutionMethod;
+      updates.resolutionMethod = options.resolutionMethod;
     }
     if (options.resolutionConfidence !== undefined) {
-      updates.resolution_confidence = options.resolutionConfidence;
+      updates.resolutionConfidence = options.resolutionConfidence;
     }
 
     this.db
@@ -342,11 +342,14 @@ export class IdentityRepository {
   getResolutionHistory(entityId) {
     if (!entityId || typeof entityId !== 'string') return [];
 
+    // Order newest-first. Use SQLite's implicit rowid (monotonically increasing
+    // per insert) as a deterministic tiebreaker when two records share the same
+    // millisecond-precision timestamp (e.g., same-millisecond inserts).
     const rows = this.db
       .select()
       .from(ResolutionRecord)
       .where(eq(ResolutionRecord.entityId, entityId))
-      .orderBy(desc(ResolutionRecord.timestamp))
+      .orderBy(desc(ResolutionRecord.timestamp), sql`rowid desc`)
       .all();
 
     return rows.map(this._mapResolutionRow);
