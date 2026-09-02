@@ -14,6 +14,9 @@ export const config = {
   port: process.env.PORT || 5001,
   nodeEnv: process.env.NODE_ENV || 'development',
   debugBusinessAnalysis: process.env.DEBUG_BUSINESS_ANALYSIS === 'true',
+  database: {
+    sqlitePath: process.env.SQLITE_DATABASE_PATH || './webloom.db',
+  },
   ai: {
     primaryModel: process.env.AI_PRIMARY_MODEL || null,
     fallbackModel: process.env.AI_FALLBACK_MODEL || null,

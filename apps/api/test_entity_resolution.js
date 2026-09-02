@@ -457,6 +457,157 @@ check('Higher provenance overwrites without conflict', () => {
   }
 });
 
+/* ================================================================== *
+ * INTEGRATION TESTS — Entity Resolution in BusinessResearchService
+ * ================================================================== */
+console.log('\n[6] Integration — Entity Resolution in BusinessResearchService');
+
+check('BusinessResearchService imports EntityResolution.calculateMatchScore', async () => {
+  const { default: BusinessResearchService } = await import('./src/services/BusinessResearchService.js');
+  const service = new BusinessResearchService();
+  assert.ok(service._mergeCanonical, '_mergeCanonical method exists');
+  assert.ok(service._mergeConservativelyForDifferentEntities, 'Conservative merge method exists');
+});
+
+check('Two matching records get same_entity resolution during merge', async () => {
+  const BusinessProfile = (await import('./src/services/BusinessProfile.js')).default;
+  const { default: BusinessResearchService } = await import('./src/services/BusinessResearchService.js');
+  const service = new BusinessResearchService();
+  
+  const profile = new BusinessProfile();
+  
+  // First record (like Geoapify)
+  const record1 = {
+    business: { name: 'Tartine Bakery', category: 'Bakery' },
+    contact: { phone: '+1-415-487-2600', website: 'https://tartinebakery.com' },
+    location: {
+      full_address: '600 Guerrero Street, San Francisco, CA 94110',
+      coordinates: { lat: 37.7614552, lng: -122.4239452 }
+    }
+  };
+  
+  // Second record (like web-extraction) - same entity
+  const record2 = {
+    business: { name: 'Tartine Bakery', category: 'Bakery' },
+    contact: { phone: '(415) 487-2600', website: 'www.tartinebakery.com' },
+    location: {
+      full_address: '600 Guerrero St, San Francisco, CA 94110',
+      coordinates: { lat: 37.7614552, lng: -122.4239452 }
+    }
+  };
+  
+  // First merge
+  service._mergeCanonical(profile, record1, 'discovered', 'geoapify', 'https://example.com', false);
+  
+  // Second merge should use entity resolution (simulate with resolution info)
+  service._mergeCanonical(profile, record2, 'discovered', 'web_extraction', 'https://example.com', true, {
+    score: 0.95,
+    matchType: 'same_entity',
+    signals: ['name_exact', 'phone_exact', 'website_exact', 'coordinates_exact'],
+    contradictions: []
+  });
+  
+  // Name should be preserved from first record (same_entity + onlyIfMissing=true)
+  assert.strictEqual(profile.get('identity.name'), 'Tartine Bakery');
+  assert.strictEqual(profile.get('contact.phone'), '+1-415-487-2600');
+});
+
+check('Different entities trigger conservative merge (no identity overwrites)', async () => {
+  const BusinessProfile = (await import('./src/services/BusinessProfile.js')).default;
+  const { default: BusinessResearchService } = await import('./src/services/BusinessResearchService.js');
+  const service = new BusinessResearchService();
+  
+  const profile = new BusinessProfile();
+  
+  // First record (existing canonical)
+  const existingRecord = {
+    business: { name: 'French Laundry', category: 'Fine Dining' },
+    contact: { phone: '+1-707-944-2380', website: 'https://thomaskeller.com/tfl' },
+    location: { full_address: '6640 Washington St, Yountville, CA' },
+    ratings: { rating: 4.8, review_count: 2500 },
+    hours: { monday: 'closed', tuesday: '17:30-22:00' }
+  };
+  
+  // Second record (different business - like Walgreens trying to merge)
+  const differentRecord = {
+    business: { name: 'Walgreens', category: 'Pharmacy' },
+    contact: { phone: '+1-415-981-6417', website: 'https://walgreens.com' },
+    location: { full_address: '135 Powell St, San Francisco, CA' },
+    ratings: { rating: 3.5, review_count: 180 }
+  };
+  
+  service._mergeCanonical(profile, existingRecord, 'discovered', 'geoapify', 'https://existing.com', false);
+  
+  // Conservative merge for different entities
+  service._mergeConservativelyForDifferentEntities(profile, differentRecord, 'https://different.com', {
+    score: 0.15,
+    matchType: 'different_entity',
+    signals: [],
+    contradictions: ['name', 'phone', 'website']
+  });
+  
+  // Identity fields should NOT be overwritten by different business
+  assert.strictEqual(profile.get('identity.name'), 'French Laundry');
+  assert.strictEqual(profile.get('contact.phone'), '+1-707-944-2380');
+  assert.strictEqual(profile.get('contact.website'), 'https://thomaskeller.com/tfl');
+});
+
+check('Entity resolution metadata is attached to profile', async () => {
+  const BusinessProfile = (await import('./src/services/BusinessProfile.js')).default;
+  const { default: BusinessResearchService } = await import('./src/services/BusinessResearchService.js');
+  const service = new BusinessResearchService();
+  
+  const profile = new BusinessProfile();
+  
+  const record1 = { business: { name: 'Coffee Shop' }, contact: {}, location: {} };
+  const record2 = { business: { name: 'Coffee Shop' }, contact: {}, location: {} };
+  
+  service._mergeCanonical(profile, record1, 'discovered', 'geoapify', 'https://a.com', false);
+  service._mergeCanonical(profile, record2, 'discovered', 'web_extraction', 'https://b.com', true, {
+    score: 0.90,
+    matchType: 'same_entity',
+    signals: ['name_exact'],
+    contradictions: []
+  });
+  
+  // Profile should have resolution trace
+  assert.ok(profile._entityResolutionTrace, 'Resolution trace should exist');
+  assert.strictEqual(profile._entityResolutionTrace.length, 1);
+  assert.strictEqual(profile._entityResolutionTrace[0].matchType, 'same_entity');
+});
+
+check('Entity resolution exception handling preserves existing merge behavior', async () => {
+  const BusinessProfile = (await import('./src/services/BusinessProfile.js')).default;
+  const { default: BusinessResearchService } = await import('./src/services/BusinessResearchService.js');
+  const service = new BusinessResearchService();
+  
+  const profile = new BusinessProfile();
+  
+  // First record
+  const record1 = {
+    business: { name: 'Test Business' },
+    contact: { phone: '555-0001' }
+  };
+  
+  // Merge first record
+  service._mergeCanonical(profile, record1, 'discovered', 'geoapify', 'https://test.com', false);
+  
+  // Second record with invalid data that might cause Entity Resolution to fail
+  // _mergeCanonical should still work even if resolutionInfo is malformed
+  const record2 = {
+    business: { name: 'Another Business' },
+    contact: { phone: '555-0002' }
+  };
+  
+  // This should NOT throw even with malformed resolution info - fallback to safe merge
+  assert.doesNotThrow(() => {
+    service._mergeCanonical(profile, record2, 'discovered', 'web_extraction', 'https://test2.com', true, null);
+  });
+  
+  // Should preserve first record's name due to onlyIfMissing=true
+  assert.strictEqual(profile.get('identity.name'), 'Test Business');
+});
+
 /* ------------------------------------------------------------------ */
 console.log(`\n------------------------------------`);
 console.log(`RESULTS: ${passed} passed, ${failed} failed, ${skipped} skipped`);
