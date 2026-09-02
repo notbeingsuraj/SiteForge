@@ -13,6 +13,8 @@ import { extractDeterministicHints } from './providers/ProviderAdapter.js';
 import { validateBusinessProfile, sanitizeFieldValue } from './BusinessProfileValidator.js';
 import { config } from '../config/env.js';
 import { calculateMatchScore } from './EntityResolution.js';
+import { initializeDatabase, getDb } from '../db/client.js';
+import { IdentityRepository, NotFoundError, DuplicateError, ValidationError } from '../db/IdentityRepository.js';
 
 class BusinessResearchService {
   /**
@@ -421,10 +423,11 @@ class BusinessResearchService {
     if (geoapifyRecord) providerTrace.geoapify = 'ok';
 
     // --- LEVEL 3: web-extraction fallback / completion of gaps ---
+    let webRecord = null;
     if (sourceUrl) {
       const webResult = await WebExtractionProvider.search({ googleMapsUrl: sourceUrl });
       if (webResult.status === 'ok' && webResult.records.length > 0) {
-        const webRecord = webResult.records[0];
+        webRecord = webResult.records[0];
         providerTrace.webExtraction = 'ok';
         
         // When both Geoapify and web-extraction records exist, use Entity Resolution
@@ -489,6 +492,17 @@ class BusinessResearchService {
       console.error('[BusinessResearchService] Profile validation issues:', validation.issues.map((i) => i.field).join(', '));
     }
 
+    // --- LEVEL 6: persistent identity resolution ---
+    // Persist the observed provider record(s) to a durable BusinessEntity so
+    // Webloom can remember which real-world business a provider record belongs
+    // to across research requests. Best-effort: a persistence failure must not
+    // fail the research pipeline, but is logged/surfaced, never treated as
+    // "identity not found".
+    let persistence = { status: 'skipped', entityId: null };
+    if (geoapifyRecord || webRecord) {
+      persistence = await this._persistIdentity(profile, hints, sourceUrl, geoapifyRecord, webRecord);
+    }
+
     const intelligence = this._profileToIntelligence(profile, hints, providerTrace);
 
     return {
@@ -498,7 +512,283 @@ class BusinessResearchService {
       provider: providerTrace,
       validation,
       hints,
+      persistence,
     };
+  }
+
+  /**
+   * Persist a provider observation to a durable BusinessEntity.
+   *
+   * First checks the (provider, providerRecordId) mapping. If already known,
+   * it reuses the mapped entity. Otherwise, when multiple providers observed
+   * the same business, it runs Entity Resolution; on a strong match the
+   * second provider's observation maps to the same persistent entity.
+   *
+   * Lifecycle:
+   *   first observation  → create BusinessEntity + ProviderIdentity
+   *   repeat observation → reuse entity, touchProviderIdentity (update lastSeen)
+   *   new provider, same business (same_entity) → map to same entity
+   *   different entity   → creates a distinct entity (never contaminates)
+   *   uncertain          → creates/keeps a separate provisional entity (no forced reuse)
+   *
+   * Persistence failures are surfaced (logged + status) and never treated as
+   * "identity not found". The research pipeline is never failed by this step.
+   *
+   * @param {BusinessProfile} profile
+   * @param {Object} hints
+   * @param {string|null} sourceUrl
+   * @param {Object|null} geoapifyRecord
+   * @param {Object|null} webRecord
+   * @returns {Promise<Object>} { status, entityId, providerIdentities, resolutionRecord }
+   */
+  async _persistIdentity(profile, hints, sourceUrl, geoapifyRecord, webRecord) {
+    let repo;
+    try {
+      // Lazily initialize DB (safe if the raw connection already exists)
+      const db = (() => {
+        try {
+          return getDb();
+        } catch {
+          return null;
+        }
+      })();
+
+      let dbInstance = db;
+      if (!dbInstance) {
+        // First use in this process — initialize (creates tables if absent)
+        dbInstance = await initializeDatabase(config?.database?.sqlitePath || './webloom.db');
+      }
+      repo = new IdentityRepository(dbInstance);
+    } catch (err) {
+      console.error(`[IdentityPersistence] Database unavailable: ${err?.message || String(err)}`);
+      return { status: 'database_unavailable', entityId: null, providerIdentities: [], resolutionRecord: null };
+    }
+
+    // Build ordered list of provider observations to persist.
+    // Geoapify is the primary/authoritative provider; web-extraction is secondary.
+    const observations = [];
+    if (geoapifyRecord) {
+      observations.push({
+        record: geoapifyRecord,
+        provider: 'geoapify',
+        providerRecordId: geoapifyRecord?.provider?.placeId || sourceUrl || null,
+      });
+    }
+    if (webRecord) {
+      observations.push({
+        record: webRecord,
+        provider: 'web_extraction',
+        providerRecordId: sourceUrl || null,
+      });
+    }
+
+    if (observations.length === 0) {
+      return { status: 'no_observations', entityId: null, providerIdentities: [], resolutionRecord: null };
+    }
+
+    try {
+      let entityId = null;
+      const providerIdentities = [];
+      let resolutionRecord = null;
+
+      // Primary observation determines the initial entity via provider lookup.
+      const primary = observations[0];
+      let primaryMapping = null;
+      if (primary.providerRecordId) {
+        try {
+          primaryMapping = repo.findProviderIdentity(primary.provider, primary.providerRecordId);
+        } catch (err) {
+          if (err instanceof NotFoundError) primaryMapping = null;
+          else throw err;
+        }
+      }
+
+      if (primaryMapping) {
+        // Already-known identity — reuse it.
+        entityId = primaryMapping.entityId;
+        try {
+          repo.touchProviderIdentity(primary.provider, primary.providerRecordId, {
+            resolutionMethod: 'known_identity',
+          });
+        } catch (err) {
+          // Non-fatal observation update failure
+          console.error(`[IdentityPersistence] touchProviderIdentity failed (best-effort): ${err?.message || String(err)}`);
+        }
+      } else {
+        // Unseen primary observation — create a new persistent entity.
+        const entity = repo.createEntity({
+          canonicalName: this._canonicalName(primary.record) || hints.name || 'Unknown Business',
+          canonicalAddress: this._canonicalAddress(primary.record) || 'Unknown',
+          canonicalPhone: this._canonicalContact(primary.record)?.phone || null,
+          canonicalWebsite: this._canonicalContact(primary.record)?.website || null,
+          canonicalLatitude: this._canonicalCoordinates(primary.record)?.lat ?? null,
+          canonicalLongitude: this._canonicalCoordinates(primary.record)?.lng ?? null,
+          category: this._canonicalCategory(primary.record) || null,
+        });
+        entityId = entity.entityId;
+
+        if (primary.providerRecordId) {
+          const mapping = repo.createProviderIdentity({
+            provider: primary.provider,
+            providerRecordId: primary.providerRecordId,
+            entityId,
+            resolutionMethod: 'first_observation',
+            resolutionConfidence: 0.95,
+          });
+          providerIdentities.push(mapping);
+        }
+      }
+
+      // Secondary observation (another provider for the same business).
+      if (observations.length > 1) {
+        const secondary = observations[1];
+        if (secondary.providerRecordId) {
+          let secondaryMapping = null;
+          try {
+            secondaryMapping = repo.findProviderIdentity(secondary.provider, secondary.providerRecordId);
+          } catch (err) {
+            if (err instanceof NotFoundError) secondaryMapping = null;
+            else throw err;
+          }
+
+          if (secondaryMapping) {
+            // Already known — reuse its entity.
+            try {
+              repo.touchProviderIdentity(secondary.provider, secondary.providerRecordId, {
+                resolutionMethod: 'known_identity',
+              });
+            } catch (err) {
+              console.error(`[IdentityPersistence] touchProviderIdentity failed (best-effort): ${err?.message || String(err)}`);
+            }
+            // Secondary known entity should align with primary when both describe
+            // the same business; do not force-overwrite a conflicting known mapping.
+          } else {
+            // Run Entity Resolution to decide whether secondary maps to the
+            // primary entity or must stay separate.
+            let matchType = 'uncertain';
+            let matchScore = 0;
+            try {
+              const matchResult = calculateMatchScore(primary.record, secondary.record);
+              matchScore = parseFloat(matchResult.score.toFixed(2));
+              matchType = matchResult.matchType;
+            } catch (err) {
+              console.error(`[IdentityPersistence] Entity Resolution failed (best-effort): ${err?.message || String(err)}`);
+            }
+
+            const resolveToPrimary = matchType === 'same_entity' && matchScore >= 0.85;
+            const targetEntityId = resolveToPrimary ? entityId : (
+              // For uncertain/different, create a distinct entity (no forced reuse /
+              // no identity contamination).
+              (() => {
+                const e = repo.createEntity({
+                  canonicalName: this._canonicalName(secondary.record) || 'Unknown Business',
+                  canonicalAddress: this._canonicalAddress(secondary.record) || 'Unknown',
+                  canonicalPhone: this._canonicalContact(secondary.record)?.phone || null,
+                  canonicalWebsite: this._canonicalContact(secondary.record)?.website || null,
+                  canonicalLatitude: this._canonicalCoordinates(secondary.record)?.lat ?? null,
+                  canonicalLongitude: this._canonicalCoordinates(secondary.record)?.lng ?? null,
+                  category: this._canonicalCategory(secondary.record) || null,
+                });
+                return e.entityId;
+              })()
+            );
+
+            const mapping = repo.createProviderIdentity({
+              provider: secondary.provider,
+              providerRecordId: secondary.providerRecordId,
+              entityId: targetEntityId,
+              resolutionMethod: resolveToPrimary ? 'same_entity_match' : (matchType === 'different_entity' ? 'different_entity' : 'uncertain'),
+              resolutionConfidence: resolveToPrimary ? matchScore : null,
+            });
+            providerIdentities.push(mapping);
+
+            // Persist the genuine resolution decision.
+            resolutionRecord = repo.createResolutionRecord({
+              entityId: targetEntityId,
+              matchScore,
+              matchType,
+              providerA: primary.provider,
+              providerRecordIdA: primary.providerRecordId || null,
+              providerB: secondary.provider,
+              providerRecordIdB: secondary.providerRecordId || null,
+              status: resolveToPrimary ? 'confirmed' : 'pending_review',
+              confidence: matchScore,
+              notes: resolveToPrimary
+                ? 'Strong match; secondary provider mapped to primary entity.'
+                : (matchType === 'different_entity'
+                  ? 'Providers describe distinct entities; kept separate.'
+                  : 'Ambiguous match; provisional separate entity pending review.'),
+            });
+          }
+        }
+      }
+
+      // Associate the resolved persistent entity ID with the in-memory profile.
+      if (entityId) {
+        profile.setEntityId(entityId);
+      }
+
+      return {
+        status: 'ok',
+        entityId,
+        providerIdentities,
+        resolutionRecord,
+      };
+    } catch (err) {
+      if (err instanceof DuplicateError) {
+        // Concurrent creation race: another request created the mapping first.
+        // Recover by re-fetching the provider identity and reusing its entity.
+        console.error(`[IdentityPersistence] Duplicate provider identity (best-effort recovery): ${err?.message || String(err)}`);
+        for (const obs of observations) {
+          if (obs.providerRecordId) {
+            try {
+              const existing = repo.findProviderIdentity(obs.provider, obs.providerRecordId);
+              if (existing) {
+                profile.setEntityId(existing.entityId);
+                return {
+                  status: 'ok',
+                  entityId: existing.entityId,
+                  providerIdentities: [existing],
+                  resolutionRecord: null,
+                  recoveredFromDuplicate: true,
+                };
+              }
+            } catch (innerErr) {
+              // continue attempting recovery
+            }
+          }
+        }
+        // Could not recover — surface as a persistence error, not "not found".
+        console.error(`[IdentityPersistence] Duplicate identity and recovery failed`);
+        return { status: 'duplicate_unresolved', entityId: null, providerIdentities: [], resolutionRecord: null };
+      }
+
+      // Genuine persistence failure — surface, do not swallow as "not found".
+      console.error(`[IdentityPersistence] Persistence failure: ${err?.message || String(err)}`);
+      return { status: 'error', entityId: null, providerIdentities: [], resolutionRecord: null, error: err?.message || String(err) };
+    }
+  }
+
+  // ---- lightweight accessors for canonical record shapes ----
+
+  _canonicalName(record) {
+    return record?.business?.name || record?.identity?.name?.value || record?.identity?.name || record?.name || null;
+  }
+
+  _canonicalAddress(record) {
+    return record?.location?.full_address || record?.location?.address || record?.address || null;
+  }
+
+  _canonicalContact(record) {
+    return record?.contact || null;
+  }
+
+  _canonicalCoordinates(record) {
+    return record?.location?.coordinates || null;
+  }
+
+  _canonicalCategory(record) {
+    return record?.business?.category || record?.identity?.category?.value || record?.identity?.category || record?.category || null;
   }
 
   /**
