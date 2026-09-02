@@ -756,10 +756,11 @@ class BusinessResearchService {
               console.log(`[Canonicalization] Entity ${entityId}: ${canonicalizationResult.canonicalizedFields.length} fields canonicalized, ${canonicalizationResult.conflictsDetected.length} conflicts, ${canonicalizationResult.provenanceUpgrades.length} provenance upgrades`);
             }
           }
-        } catch (canonErr) {
-          // Canonicalization failure must not break the research pipeline
-          console.error(`[Canonicalization] Failed (best-effort): ${canonErr?.message || String(canonErr)}`);
         }
+      } catch (canonErr) {
+        // Canonicalization failure must not break the research pipeline
+        console.error(`[Canonicalization] Failed (best-effort): ${canonErr?.message || String(canonErr)}`);
+      }
 
       return {
         status: 'ok',

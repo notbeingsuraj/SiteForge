@@ -182,8 +182,7 @@ function createTables(db) {
       retrieved_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       published_at TEXT,
       updated_at TEXT,
-      metadata TEXT,
-      FOREIGN KEY (domain) REFERENCES source(domain)
+      metadata TEXT
     )
   `);
 
