@@ -23,6 +23,7 @@ const TEST_DB = './test_identity_integration.db';
 let passed = 0;
 let failed = 0;
 const failures = [];
+let asyncTestQueue = Promise.resolve();
 
 function check(name, fn) {
   try {
@@ -37,15 +38,18 @@ function check(name, fn) {
 }
 
 async function checkAsync(name, fn) {
-  try {
-    await fn();
-    passed += 1;
-    console.log(`  ✓ ${name}`);
-  } catch (err) {
-    failed += 1;
-    failures.push({ name, error: err });
-    console.error(`  ✗ ${name}\n      ${err.message}`);
-  }
+  asyncTestQueue = asyncTestQueue.then(async () => {
+    try {
+      await fn();
+      passed += 1;
+      console.log(`  ✓ ${name}`);
+    } catch (err) {
+      failed += 1;
+      failures.push({ name, error: err });
+      console.error(`  ✗ ${name}\n      ${err.message}`);
+    }
+  });
+  return asyncTestQueue;
 }
 
 // ---- realistic provider record fixtures (canonical flat shape) ----
@@ -381,6 +385,8 @@ checkAsync('Closed database surfaces error status, never "identity not found"', 
 /* ================================================================== *
  * CLEANUP
  * ================================================================== */
+await asyncTestQueue;
+
 console.log('\n[9] Cleanup');
 
 check('Close test database', () => {

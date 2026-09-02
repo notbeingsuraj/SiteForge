@@ -67,7 +67,10 @@ const DISTANCE_THRESHOLDS = {
 // Helper functions (defined once, exported)
 export function normalizePhone(phone) {
   if (!phone) return null;
-  const digits = phone.replace(/[^\d+]/g, '');
+  let digits = phone.replace(/[^\d+]/g, '');
+  if (digits.startsWith('+')) {
+    digits = digits.slice(1);
+  }
   if (digits.startsWith('1') && digits.length === 11) {
     return digits.slice(1);
   }

@@ -101,10 +101,11 @@ check('fuzzySimilarity helper exists', () => {
 
 check('normalizePhone helper exists', () => {
   assert.strictEqual(typeof normalizePhone, 'function');
-  // normalizePhone keeps '+' in output: '+1 (415) 555-0123' -> '+14155550123'
-  assert.strictEqual(normalizePhone('+1 (415) 555-0123'), '+14155550123');
+  // normalizePhone now strips leading + and US country code 1
+  assert.strictEqual(normalizePhone('+1 (415) 555-0123'), '4155550123');
   assert.strictEqual(normalizePhone('415-555-0123'), '4155550123');
   assert.strictEqual(normalizePhone('14155550123'), '4155550123'); // Strips leading 1 for 11-digit
+  assert.strictEqual(normalizePhone('+14155550123'), '4155550123');
   assert.strictEqual(normalizePhone(null), null);
 });
 
