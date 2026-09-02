@@ -297,7 +297,7 @@ function createTables(db) {
       id TEXT PRIMARY KEY,
       entity_id TEXT NOT NULL,
       field_path TEXT NOT NULL,
-      values TEXT NOT NULL,
+      "values" TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'conflicted',
       resolution_strategy TEXT,
       resolution_reason TEXT,

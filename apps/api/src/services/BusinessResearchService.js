@@ -731,7 +731,7 @@ class BusinessResearchService {
 
       // PHASE 4: Canonicalization - Process observations to build canonical business intelligence
       try {
-        const canonicalizationService = new CanonicalizationService(this.db);
+        const canonicalizationService = new CanonicalizationService(dbInstance);
         
         // Process each observation through canonicalization
         for (const obs of observations) {
