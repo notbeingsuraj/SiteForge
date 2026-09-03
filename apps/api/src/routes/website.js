@@ -59,6 +59,7 @@ router.post('/generate', async (req, res, next) => {
     const result = await WebsiteGenerationService.generate(businessData, {
       build: options.build !== false,
       start: options.start !== false,
+      skipAIDesign: options.skipAIDesign === true,
     });
 
     res.json({ success: true, website: result });
