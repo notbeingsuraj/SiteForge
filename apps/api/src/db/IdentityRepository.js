@@ -1058,37 +1058,343 @@ export class IdentityRepository {
 
   /**
    * Resolve a pending review item (pending -> approved | rejected).
-   * Persists the reviewer decision. Does NOT touch canonical data or delete the
-   * original resolution evidence — a review decision is auditable and additive.
+   *
+   * Phase 16: this is the production, actionable decision boundary. Both
+   * approval and rejection apply the SAFE identity action defined for the
+   * review's match type, atomically, idempotently, and with a durable audit
+   * trail. It NEVER deletes historical evidence and NEVER merges entities for
+   * same_brand_different_location.
    *
    * @param {string} id
    * @param {'approved'|'rejected'} status
-   * @param {Object} [options] - { resolvedBy?, note? }
+   * @param {Object} [options] - { resolvedBy?, note?, injectFailure? }
    * @returns {Object} updated review item
    */
   resolveReviewItem(id, status, options = {}) {
-    if (status !== 'approved' && status !== 'rejected') {
-      throw new ValidationError("status must be 'approved' or 'rejected'");
+    return this.enforceReviewDecision(id, status, options);
+  }
+
+  /**
+   * Enforce a human review decision (
+   * review_item status pending -> approved | rejected).
+   *
+   * Decision semantics by review match type:
+   *  - REJECT (any match type): status -> rejected. No entity/canonical mutation.
+   *  - APPROVE same_entity / uncertain (pairwise, relatedEntityId present):
+   *      reassign the provisional secondary provider mapping onto the
+   *      authoritative entity, mark the provisional entity MERGED, write an
+   *      audit resolution_record, preserve all observations/history.
+   *  - APPROVE relocated_entity (temporal, single entity): promote the approved
+   *      new address to current canonical location; preserve historical
+   *      observations. Audit stays on the review item.
+   *  - APPROVE same_brand_different_location: confirm distinct branches; the two
+   *      businesses are NEVER merged. Status-only approval, no entity mutation.
+   *  - APPROVE without relatedEntityId (uncertain/unknown): status-only approval.
+   *
+   * Atomicity: the whole decision is one SQLite transaction — either every
+   * identity write commits or none do.
+   *
+   * Idempotency: a resolved review re-resolved to the SAME decision is a safe
+   * no-op returning the existing item. Re-resolving to a DIFFERENT decision
+   * throws ValidationError (history is never silently rewritten).
+   *
+   * @param {string} id
+   * @param {'approved'|'rejected'} decision
+   * @param {Object} [options] - { resolvedBy?, note?, injectFailure? }
+   * @returns {Object} updated review item
+   */
+  enforceReviewDecision(id, decision, options = {}) {
+    if (decision !== 'approved' && decision !== 'rejected') {
+      throw new ValidationError("decision must be 'approved' or 'rejected'");
     }
     const existing = this.getReviewItem(id);
     if (!existing) {
       throw new NotFoundError(`Review item ${id} not found`);
     }
 
+    // Idempotency + immutable-history guard: an already-resolved review may be
+    // re-confirmed to the same decision (no-op), but never reopened or changed.
+    if (existing.status !== 'pending') {
+      if (existing.status === decision) return existing;
+      throw new ValidationError(
+        `Review ${id} already resolved as '${existing.status}'; cannot change to '${decision}'.`
+      );
+    }
+
     const now = new Date().toISOString();
-    this.db
-      .update(ReviewItem)
+    const resolvedBy = options.resolvedBy || null;
+    const note = options.note || null;
+    // Diagnostic/test seam only: when set, forces a mid-transaction failure so
+    // callers can verify the identity action rolls back atomically. No-op when
+    // undefined (never set in production paths).
+    const injectFailure = options.injectFailure;
+
+    this.db.transaction((tx) => {
+      if (decision === 'rejected') {
+        // Rejection preserves the provisional state: only the review status and
+        // reviewer metadata change. No entity, provider, or canonical mutation.
+        this._txSetReviewStatus(tx, id, 'rejected', { now, resolvedBy, note });
+      } else {
+        this._txApplyApproval(tx, existing, { now, resolvedBy, note });
+      }
+
+      if (injectFailure) {
+        throw new Error(
+          typeof injectFailure === 'string' ? injectFailure : 'Injected failure before transaction commit.'
+        );
+      }
+    });
+
+    return this.getReviewItem(id);
+  }
+
+  /**
+   * Apply the SAFE approval action for a review's match type (transactional).
+   * @private
+   */
+  _txApplyApproval(tx, review, { now, resolvedBy, note }) {
+    const targetEntityId = review.entityId;
+    const sourceEntityId = review.relatedEntityId;
+
+    if (review.matchType === 'same_brand_different_location') {
+      // Confirm distinct branches. NEVER merge. Status-only approval.
+      this._txSetReviewStatus(tx, review.id, 'approved', { now, resolvedBy, note });
+      return;
+    }
+
+    if (
+      review.matchType === 'same_entity' ||
+      review.matchType === 'uncertain'
+    ) {
+      if (!sourceEntityId) {
+        // No provisional separate entity to fold in — nothing to merge.
+        this._txSetReviewStatus(tx, review.id, 'approved', { now, resolvedBy, note });
+        return;
+      }
+      this._txApplyMerge(tx, review, sourceEntityId, targetEntityId, { now, resolvedBy, note });
+      return;
+    }
+
+    if (review.matchType === 'relocated_entity') {
+      if (sourceEntityId) {
+        // A relocation is a single-entity, over-time move; it must NOT fold a
+        // distinct related entity in. Refuse the ambiguous merge-style approval.
+        throw new ValidationError(
+          `Relocation review ${review.id} carries a relatedEntityId; refusing ambiguous entity merge.`
+        );
+      }
+      this._txApplyRelocation(tx, review, { now, resolvedBy, note });
+      return;
+    }
+
+    // Unknown/other match type: status-only approval, no identity mutation.
+    this._txSetReviewStatus(tx, review.id, 'approved', { now, resolvedBy, note });
+  }
+
+  /**
+   * Approve same-entity: move the provisional provider mapping onto the
+   * authoritative entity, mark the provisional entity MERGED, and write an
+   * explicit audit resolution record. Preserves observations/history.
+   * @private
+   */
+  _txApplyMerge(tx, review, sourceEntityId, targetEntityId, { now, resolvedBy, note }) {
+    if (sourceEntityId === targetEntityId) {
+      throw new ValidationError(`Cannot merge entity ${sourceEntityId} into itself.`);
+    }
+
+    const provider = review.relatedProvider || review.provider || null;
+    const providerRecordId = review.relatedProviderRecordId || review.providerRecordId || null;
+    if (!provider || !providerRecordId) {
+      throw new ValidationError(
+        `Review ${review.id} has no provider-record pair to reassign; cannot approve as a merge.`
+      );
+    }
+    if (!sourceEntityId) {
+      throw new ValidationError(`Review ${review.id} has no related entity to merge from.`);
+    }
+
+    const sourceRows = tx
+      .select()
+      .from(BusinessEntity)
+      .where(eq(BusinessEntity.entityId, sourceEntityId))
+      .all();
+    if (sourceRows.length === 0) {
+      throw new NotFoundError(`Source entity ${sourceEntityId} not found; cannot merge.`);
+    }
+    if (sourceRows[0].status === 'MERGED' || sourceRows[0].status === 'DEPRECATED') {
+      throw new ValidationError(
+        `Source entity ${sourceEntityId} is already '${sourceRows[0].status}'; merge is ambiguous.`
+      );
+    }
+    const targetRows = tx
+      .select()
+      .from(BusinessEntity)
+      .where(eq(BusinessEntity.entityId, targetEntityId))
+      .all();
+    if (targetRows.length === 0) {
+      throw new NotFoundError(`Target entity ${targetEntityId} not found; cannot merge.`);
+    }
+
+    const mappingRows = tx
+      .select()
+      .from(ProviderIdentity)
+      .where(
+        and(
+          eq(ProviderIdentity.provider, provider),
+          eq(ProviderIdentity.providerRecordId, providerRecordId)
+        )
+      )
+      .all();
+    if (mappingRows.length === 0) {
+      throw new NotFoundError(
+        `Provider mapping (${provider}, ${providerRecordId}) not found; cannot merge.`
+      );
+    }
+    const mapping = mappingRows[0];
+
+    if (mapping.entityId !== targetEntityId) {
+      // Move the provisional secondary mapping onto the authoritative entity.
+      tx.update(ProviderIdentity)
+        .set({ entityId: targetEntityId, lastSeen: now })
+        .where(eq(ProviderIdentity.id, mapping.id))
+        .run();
+    }
+
+    // Mark the absorbed entity MERGED (do NOT delete — its observations, claims,
+    // conflicts, and provider history remain attached as the audit trail).
+    tx.update(BusinessEntity)
+      .set({
+        status: 'MERGED',
+        updatedAt: now,
+      })
+      .where(eq(BusinessEntity.entityId, sourceEntityId))
+      .run();
+
+    // Explicit audit resolution record for the merge (source/target/mapping/
+    // reviewer/review/reason), independent of final DB state.
+    const auditNote = JSON.stringify({
+      action: 'merge',
+      sourceEntityId,
+      targetEntityId,
+      provider,
+      providerRecordId,
+      reviewId: review.id,
+      resolvedBy,
+      reason: note || review.reason || null,
+    });
+    tx.insert(ResolutionRecord)
+      .values({
+        id: `res_${randomUUID().replace(/-/g, '').slice(0, 16)}`,
+        entityId: targetEntityId,
+        matchScore: typeof review.matchScore === 'number' ? review.matchScore : 0,
+        matchType: 'same_entity',
+        providerA: review.provider || provider || 'unknown',
+        providerRecordIdA: review.providerRecordId || null,
+        providerB: review.relatedProvider || provider || 'unknown',
+        providerRecordIdB: review.relatedProviderRecordId || null,
+        timestamp: now,
+        status: 'merged',
+        confidence: typeof review.matchScore === 'number' ? review.matchScore : null,
+        notes: auditNote,
+      })
+      .run();
+
+    this._txSetReviewStatus(tx, review.id, 'approved', { now, resolvedBy, note });
+  }
+
+  /**
+   * Approve relocation: promote the approved new address to the current
+   * canonical location (entity + canonical field), preserving historical
+   * observations. Audit stays on the review item's immutable evidence.
+   * @private
+   */
+  _txApplyRelocation(tx, review, { now, resolvedBy, note }) {
+    if (!review.relatedEntityId && !review.entityId) {
+      throw new ValidationError(`Relocation review ${review.id} has no entity to update.`);
+    }
+    const entityId = review.entityId;
+    const evidence = review.evidence && typeof review.evidence === 'object' ? review.evidence : {};
+    const newAddress = evidence.addressTo || null;
+    if (!newAddress) {
+      throw new ValidationError(
+        `Relocation review ${review.id} has no approved new address (evidence.addressTo missing); cannot update canonical location.`
+      );
+    }
+
+    const entityRows = tx
+      .select()
+      .from(BusinessEntity)
+      .where(eq(BusinessEntity.entityId, entityId))
+      .all();
+    if (entityRows.length === 0) {
+      throw new NotFoundError(`Entity ${entityId} not found; cannot apply relocation.`);
+    }
+
+    // Current canonical location becomes the approved new address. Historical
+    // observations (including the old address) are NOT deleted.
+    tx.update(BusinessEntity)
+      .set({ canonicalAddress: newAddress, updatedAt: now })
+      .where(eq(BusinessEntity.entityId, entityId))
+      .run();
+
+    // Upsert the canonical location field with the highest-priority,
+    // reviewer-confirmed provenance so it deterministically supersedes earlier
+    // provider-derived values via the existing canonicalization model.
+    const existing = tx
+      .select()
+      .from(CanonicalField)
+      .where(
+        and(
+          eq(CanonicalField.entityId, entityId),
+          eq(CanonicalField.fieldPath, 'location.full_address')
+        )
+      )
+      .all();
+    if (existing.length > 0) {
+      tx.update(CanonicalField)
+        .set({
+          value: newAddress,
+          provenance: 'verified',
+          confidence: 1.0,
+          updatedAt: now,
+        })
+        .where(eq(CanonicalField.id, existing[0].id))
+        .run();
+    } else {
+      tx.insert(CanonicalField)
+        .values({
+          id: `cf_${randomUUID().replace(/-/g, '').slice(0, 16)}`,
+          entityId,
+          fieldPath: 'location.full_address',
+          value: newAddress,
+          provenance: 'verified',
+          confidence: 1.0,
+          resolvedAt: now,
+          supersededAt: null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+    }
+
+    this._txSetReviewStatus(tx, review.id, 'approved', { now, resolvedBy, note });
+  }
+
+  /**
+   * Set the review status + reviewer metadata within a transaction.
+   * @private
+   */
+  _txSetReviewStatus(tx, id, status, { now, resolvedBy, note }) {
+    tx.update(ReviewItem)
       .set({
         status,
         resolvedAt: now,
-        resolvedBy: options.resolvedBy || null,
-        resolutionNote: options.note || null,
+        resolvedBy: resolvedBy || null,
+        resolutionNote: note || null,
         updatedAt: now,
       })
       .where(eq(ReviewItem.id, id))
       .run();
-
-    return this.getReviewItem(id);
   }
 
   _mapReviewItemRow(row) {
