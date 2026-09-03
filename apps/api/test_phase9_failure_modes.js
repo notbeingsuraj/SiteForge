@@ -67,7 +67,7 @@ async function main() {
   const internalFailure = await request(port, '/api/business/analyze', { name: 'Failure Mode Bakery' });
   assert.equal(internalFailure.status, 500);
   assert.equal(internalFailure.body.message, 'controlled internal failure');
-  assert.equal(typeof internalFailure.body.stack, 'string');
+  assert.equal(internalFailure.body.stack, null);
   BusinessResearchService.extractBusinessIntelligenceWithProviders = originalResearch;
 
   // The process remains usable after the error boundary has handled the exception.
