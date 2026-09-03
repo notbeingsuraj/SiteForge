@@ -960,6 +960,29 @@ export class IdentityRepository {
       createdAt: row.createdAt
     };
   }
+
+  /**
+   * Load canonical fields from persistent storage into a BusinessProfile
+   * @param {string} entityId - Entity ID to load canonical fields for
+   * @param {BusinessProfile} profile - BusinessProfile instance to populate
+   * @returns {Promise<void>}
+   */
+  async loadCanonicalFieldsIntoProfile(entityId, profile) {
+    if (!entityId || !profile) return;
+    
+    const canonicalFields = this.getCanonicalFields(entityId);
+    for (const field of canonicalFields) {
+      // Only set if the profile doesn't already have a stronger value
+      const current = profile.getField(field.fieldPath);
+      if (!current || current.value === null) {
+        // Load the canonical value into the profile
+        profile.set(field.fieldPath, field.value, field.provenance, field.confidence, {
+          sourceId: field.sourceId,
+          claimId: field.claimId
+        });
+      }
+    }
+  }
 }
 
 export default IdentityRepository;

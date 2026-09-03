@@ -727,6 +727,14 @@ class BusinessResearchService {
       // Associate the resolved persistent entity ID with the in-memory profile.
       if (entityId) {
         profile.setEntityId(entityId);
+        
+        // PHASE 5: Load canonical fields from persistent storage into the profile
+        // This ensures that previously canonicalized fields are available for merging
+        try {
+          await repo.loadCanonicalFieldsIntoProfile(entityId, profile);
+        } catch (loadErr) {
+          console.error(`[CanonicalProfileLoad] Failed to load canonical fields: ${loadErr?.message || String(loadErr)}`);
+        }
       }
 
       // PHASE 4: Canonicalization - Process observations to build canonical business intelligence
@@ -1079,6 +1087,29 @@ class BusinessResearchService {
     const reviewCount = profile.get('ratings.review_count');
     const services = profile.get('identity.services') || [];
 
+    // Get enhanced field info with provenance and conflict info
+    const getFieldWithProvenance = (path) => {
+      const field = profile.getField(path);
+      if (!field) return { value: null, provenance: null, confidence: 0, hasConflict: false };
+      const conflicts = profile.getConflicts ? profile.getConflicts(path) : [];
+      return {
+        value: field.value,
+        provenance: field.provenance,
+        confidence: field.confidence,
+        hasConflict: conflicts.length > 0,
+        conflictCount: conflicts.length
+      };
+    };
+
+    const nameInfo = getFieldWithProvenance('identity.name');
+    const categoryInfo = getFieldWithProvenance('identity.category');
+    const phoneInfo = getFieldWithProvenance('contact.phone');
+    const websiteInfo = getFieldWithProvenance('contact.website');
+    const addressInfo = getFieldWithProvenance('location.full_address');
+    const coordinatesInfo = getFieldWithProvenance('location.coordinates');
+    const ratingInfo = getFieldWithProvenance('ratings.rating');
+    const reviewCountInfo = getFieldWithProvenance('ratings.review_count');
+
     return {
       source: {
         query: hints.query || null,
@@ -1090,46 +1121,57 @@ class BusinessResearchService {
         providers: providerTrace,
       },
       identity: {
-        name,
-        category,
+        name: nameInfo.value,
+        category: categoryInfo.value,
         businessType: profile.get('identity.business_type'),
         description: profile.get('identity.description'),
         categories: profile.get('identity.categories') || [],
+        // Provenance metadata
+        _provenance: {
+          name: { provenance: nameInfo.provenance, confidence: nameInfo.confidence, hasConflict: nameInfo.hasConflict },
+          category: { provenance: categoryInfo.provenance, confidence: categoryInfo.confidence, hasConflict: categoryInfo.hasConflict },
+          phone: { provenance: phoneInfo.provenance, confidence: phoneInfo.confidence, hasConflict: phoneInfo.hasConflict },
+          website: { provenance: websiteInfo.provenance, confidence: websiteInfo.confidence, hasConflict: websiteInfo.hasConflict },
+          address: { provenance: addressInfo.provenance, confidence: addressInfo.confidence, hasConflict: addressInfo.hasConflict },
+          coordinates: { provenance: coordinatesInfo.provenance, confidence: coordinatesInfo.confidence, hasConflict: coordinatesInfo.hasConflict },
+          rating: { provenance: ratingInfo.provenance, confidence: ratingInfo.confidence, hasConflict: ratingInfo.hasConflict },
+          reviewCount: { provenance: reviewCountInfo.provenance, confidence: reviewCountInfo.confidence, hasConflict: reviewCountInfo.hasConflict },
+        },
       },
       contact: {
-        phone,
+        phone: phoneInfo.value,
         email: profile.get('contact.email'),
-        website,
+        website: websiteInfo.value,
       },
       location: {
-        address,
+        address: addressInfo.value,
         city: profile.get('location.city'),
         state: profile.get('location.state'),
         country: profile.get('location.country'),
         postalCode: profile.get('location.postal_code'),
-        coordinates: coordinates || null,
+        coordinates: coordinatesInfo.value || null,
       },
       digitalPresence: {
         googleMapsUrl: hints.sourceUrl || null,
-        website,
+        website: websiteInfo.value,
         socialProfiles: { facebook: null, instagram: null, twitter: null, linkedin: null },
-        hasWebsite: !!website,
+        hasWebsite: !!websiteInfo.value,
         photos: [],
       },
       services,
-      trustSignals: this.buildTrustSignals({ rating, review_count: reviewCount }, []),
+      trustSignals: this.buildTrustSignals({ rating: ratingInfo.value, review_count: reviewCountInfo.value }, []),
       positioning: {
         priceLevel: null,
-        category,
-        location: address,
+        category: categoryInfo.value,
+        location: addressInfo.value,
       },
       facts: [
-        ...(name ? [{ claim: `Business name is ${name}`, source: 'structured_provider', verified: true }] : []),
-        ...(rating != null ? [{ claim: `Has a rating of ${rating}/5`, source: 'structured_provider', verified: true }] : []),
+        ...(nameInfo.value ? [{ claim: `Business name is ${nameInfo.value}`, source: 'structured_provider', verified: true }] : []),
+        ...(ratingInfo.value != null ? [{ claim: `Has a rating of ${ratingInfo.value}/5`, source: 'structured_provider', verified: true }] : []),
       ],
-      unknowns: this.identifyUnknownsIntelligence({ website, phone, email: null }),
-      rating,
-      reviewCount,
+      unknowns: this.identifyUnknownsIntelligence({ website: websiteInfo.value, phone: phoneInfo.value, email: null }),
+      rating: ratingInfo.value,
+      reviewCount: reviewCountInfo.value,
       openingHours: profile.get('hours') || null,
       reviews: [],
       photos: [],

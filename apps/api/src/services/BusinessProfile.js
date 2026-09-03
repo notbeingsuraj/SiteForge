@@ -921,6 +921,50 @@ class BusinessProfile {
       hasConflict: this.getConflicts(path).length > 0
     };
   }
+
+  /**
+   * Load canonical fields from persistent storage into this profile
+   * This hydrates the profile with persisted canonical field values
+   * @param {IdentityRepository} repo - IdentityRepository instance
+   * @param {string} entityId - Entity ID to load canonical fields for
+   */
+  loadCanonicalFields(repo, entityId) {
+    if (!repo || !entityId) return;
+    
+    const canonicalFields = repo.getCanonicalFields(entityId);
+    for (const field of canonicalFields) {
+      // Set the field value in the profile with the canonical provenance
+      const current = this.getField(field.fieldPath);
+      // Only overwrite if we have a stronger canonical value
+      if (current === null || current.value === null) {
+        // No existing value, set the canonical value
+        this.data[field.fieldPath.split('.')[0]][field.fieldPath.split('.')[1]] = {
+          value: field.value,
+          provenance: field.provenance,
+          confidence: field.confidence,
+          sourceInfo: { sourceId: field.sourceId },
+          updatedAt: field.updatedAt,
+          evidenceId: null,
+          sourceId: field.sourceId,
+          retrievedAt: field.updatedAt
+        };
+      }
+    }
+  }
+
+  getFieldEnhanced(path) {
+    const baseField = this.getField(path);
+    if (!baseField) return null;
+    
+    return {
+      ...baseField,
+      evidenceId: baseField.evidenceId,
+      sourceId: baseField.sourceId,
+      retrievedAt: baseField.retrievedAt,
+      conflictId: this.getConflicts(path)[0]?.id,
+      hasConflict: this.getConflicts(path).length > 0
+    };
+  }
 }
 
 export default BusinessProfile;
