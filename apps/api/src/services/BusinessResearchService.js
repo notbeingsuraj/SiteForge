@@ -618,7 +618,7 @@ class BusinessResearchService {
         }
       } else {
         // Unseen primary observation — create a new persistent entity.
-        const entity = repo.createEntity({
+        const identityData = {
           canonicalName: this._canonicalName(primary.record) || hints.name || 'Unknown Business',
           canonicalAddress: this._canonicalAddress(primary.record) || 'Unknown',
           canonicalPhone: this._canonicalContact(primary.record)?.phone || null,
@@ -626,19 +626,20 @@ class BusinessResearchService {
           canonicalLatitude: this._canonicalCoordinates(primary.record)?.lat ?? null,
           canonicalLongitude: this._canonicalCoordinates(primary.record)?.lng ?? null,
           category: this._canonicalCategory(primary.record) || null,
-        });
-        entityId = entity.entityId;
-        transientEntityId = entityId;
+        };
 
         if (primary.providerRecordId) {
-          const mapping = repo.createProviderIdentity({
+          const created = repo.createEntityWithProviderIdentity(identityData, {
             provider: primary.provider,
             providerRecordId: primary.providerRecordId,
-            entityId,
             resolutionMethod: 'first_observation',
             resolutionConfidence: 0.95,
           });
-          providerIdentities.push(mapping);
+          entityId = created.entity.entityId;
+          providerIdentities.push(created.providerIdentity);
+        } else {
+          const entity = repo.createEntity(identityData);
+          entityId = entity.entityId;
         }
       }
 

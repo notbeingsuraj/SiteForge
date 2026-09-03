@@ -110,6 +110,73 @@ export class IdentityRepository {
   }
 
   /**
+   * Atomically create an entity and its first provider identity.
+   *
+   * The provider identity UNIQUE constraint remains authoritative. Any
+   * insertion failure rolls back both rows.
+   */
+  createEntityWithProviderIdentity(entityData, providerData) {
+    if (!entityData?.canonicalName || typeof entityData.canonicalName !== 'string') {
+      throw new ValidationError('canonicalName is required and must be a string');
+    }
+    if (!entityData?.canonicalAddress || typeof entityData.canonicalAddress !== 'string') {
+      throw new ValidationError('canonicalAddress is required and must be a string');
+    }
+    if (!providerData?.provider || typeof providerData.provider !== 'string') {
+      throw new ValidationError('provider is required and must be a string');
+    }
+    if (!providerData?.providerRecordId || typeof providerData.providerRecordId !== 'string') {
+      throw new ValidationError('providerRecordId is required and must be a string');
+    }
+
+    const entityId = `ent_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+    const providerIdentityId = `pid_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+    const now = new Date().toISOString();
+    const entityRow = {
+      entityId,
+      canonicalName: entityData.canonicalName,
+      canonicalPhone: entityData.canonicalPhone || null,
+      canonicalWebsite: entityData.canonicalWebsite || null,
+      canonicalAddress: entityData.canonicalAddress,
+      canonicalLatitude: entityData.canonicalLatitude ?? null,
+      canonicalLongitude: entityData.canonicalLongitude ?? null,
+      category: entityData.category || null,
+      status: entityData.status || 'ACTIVE',
+      createdAt: now,
+      updatedAt: now,
+    };
+    const providerRow = {
+      id: providerIdentityId,
+      entityId,
+      provider: providerData.provider,
+      providerRecordId: providerData.providerRecordId,
+      firstSeen: now,
+      lastSeen: now,
+      resolutionMethod: providerData.resolutionMethod || 'first_observation',
+      resolutionConfidence: providerData.resolutionConfidence ?? null,
+    };
+
+    try {
+      this.db.transaction((tx) => {
+        tx.insert(BusinessEntity).values(entityRow).run();
+        tx.insert(ProviderIdentity).values(providerRow).run();
+      });
+    } catch (err) {
+      if (err.message && err.message.includes('UNIQUE constraint failed')) {
+        throw new DuplicateError(
+          `Provider identity (${providerData.provider}, ${providerData.providerRecordId}) already exists`
+        );
+      }
+      throw err;
+    }
+
+    return {
+      entity: this._mapEntityRow(entityRow),
+      providerIdentity: this._mapProviderRow(providerRow),
+    };
+  }
+
+  /**
    * Get a BusinessEntity by its primary key.
    * 
    * @param {string} entityId
