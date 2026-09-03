@@ -770,6 +770,16 @@ class BusinessResearchService {
         console.error(`[Canonicalization] Failed (best-effort): ${canonErr?.message || String(canonErr)}`);
       }
 
+      // Refresh the in-memory profile so downstream consumers receive the
+      // canonical selection after processing fresh provider observations.
+      if (entityId) {
+        try {
+          await repo.loadCanonicalFieldsIntoProfile(entityId, profile);
+        } catch (loadErr) {
+          console.error(`[CanonicalProfileLoad] Failed to refresh canonical fields: ${loadErr?.message || String(loadErr)}`);
+        }
+      }
+
       return {
         status: 'ok',
         entityId,
@@ -976,6 +986,9 @@ class BusinessResearchService {
   }
 
   /**
+   * Enrich missing profile fields without overwriting provider facts.
+   */
+  async _enrichMissingWithAI(profile, sourceUrl) {
     try {
       const { default: AIService } = await import('./AIService.js');
 

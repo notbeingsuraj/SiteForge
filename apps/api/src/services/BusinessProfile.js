@@ -155,7 +155,11 @@ class BusinessProfile {
       });
     }
     
-    if (newPriority > currentPriority || (newPriority === currentPriority && confidence > (current?.confidence || 0))) {
+    const shouldUpdate = sourceInfo.canonical === true
+      || newPriority > currentPriority
+      || (newPriority === currentPriority && confidence > (current?.confidence || 0));
+
+    if (shouldUpdate) {
       target[field] = {
         value,
         provenance,
