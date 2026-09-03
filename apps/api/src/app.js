@@ -13,6 +13,7 @@ import brandStrategyRoutes from './routes/brandStrategy.js';
 import landingPageRoutes from './routes/landingPage.js';
 import digitalAuditRoutes from './routes/digitalAudit.js';
 import websiteRoutes from './routes/website.js';
+import reviewsRoutes from './routes/reviews.js';
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.use('/api/brand-strategy', brandStrategyRoutes);
 app.use('/api/landing-page', landingPageRoutes);
 app.use('/api/digital-audit', digitalAuditRoutes);
 app.use('/api/website', websiteRoutes);
+app.use('/api/reviews', reviewsRoutes);
 
 // API info endpoint
 app.get('/api', (req, res) => {
@@ -67,6 +69,7 @@ app.get('/api', (req, res) => {
       brandStrategy: '/api/brand-strategy',
       landingPage: '/api/landing-page',
       digitalAudit: '/api/digital-audit',
+      reviews: '/api/reviews',
     },
   });
 });

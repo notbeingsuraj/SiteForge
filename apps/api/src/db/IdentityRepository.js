@@ -1057,6 +1057,52 @@ export class IdentityRepository {
   }
 
   /**
+   * Read-only assembly of everything an operator needs to decide a review,
+   * using only existing repository read methods. Does NOT mutate anything.
+   *
+   * Returns an object keyed for operator inspection (why Webloom created the
+   * review), or `null` if the review does not exist.
+   *
+   * @param {string} reviewId
+   * @returns {Object|null} {
+   *   review,           review item (metadata + evidence + timestamps)
+   *   entities,         { entity, relatedEntity } (BusinessEntity or null)
+   *   providerIdentities, { provider, relatedProvider } (ProviderIdentity or null)
+   *   context,          { observations, canonicalFields, conflicts } for entity
+   * }
+   */
+  getReviewDetail(reviewId) {
+    const review = this.getReviewItem(reviewId);
+    if (!review) return null;
+
+    const entityId = review.entityId;
+    const relatedEntityId = review.relatedEntityId;
+
+    const entity = entityId ? this.getEntityById(entityId) : null;
+    const relatedEntity = relatedEntityId ? this.getEntityById(relatedEntityId) : null;
+
+    const provider =
+      review.provider && review.providerRecordId
+        ? this.findProviderIdentity(review.provider, review.providerRecordId)
+        : null;
+    const relatedProvider =
+      review.relatedProvider && review.relatedProviderRecordId
+        ? this.findProviderIdentity(review.relatedProvider, review.relatedProviderRecordId)
+        : null;
+
+    const observations = entityId ? this.getObservations(entityId) : [];
+    const canonicalFields = entityId ? this.getCanonicalFields(entityId) : [];
+    const conflicts = entityId ? this.getConflicts(entityId) : [];
+
+    return {
+      review,
+      entities: { entity, relatedEntity },
+      providerIdentities: { provider, relatedProvider },
+      context: { observations, canonicalFields, conflicts },
+    };
+  }
+
+  /**
    * Resolve a pending review item (pending -> approved | rejected).
    *
    * Phase 16: this is the production, actionable decision boundary. Both
@@ -1124,6 +1170,10 @@ export class IdentityRepository {
     const now = new Date().toISOString();
     const resolvedBy = options.resolvedBy || null;
     const note = options.note || null;
+    // The operator may supply the approved relocation address at the HTTP
+    // boundary; it defaults to the address already persisted in the review's
+    // evidence (Phase 16 default is preserved when absent).
+    const addressTo = options.addressTo || null;
     // Diagnostic/test seam only: when set, forces a mid-transaction failure so
     // callers can verify the identity action rolls back atomically. No-op when
     // undefined (never set in production paths).
@@ -1135,7 +1185,7 @@ export class IdentityRepository {
         // reviewer metadata change. No entity, provider, or canonical mutation.
         this._txSetReviewStatus(tx, id, 'rejected', { now, resolvedBy, note });
       } else {
-        this._txApplyApproval(tx, existing, { now, resolvedBy, note });
+        this._txApplyApproval(tx, existing, { now, resolvedBy, note, addressTo });
       }
 
       if (injectFailure) {
@@ -1152,7 +1202,7 @@ export class IdentityRepository {
    * Apply the SAFE approval action for a review's match type (transactional).
    * @private
    */
-  _txApplyApproval(tx, review, { now, resolvedBy, note }) {
+  _txApplyApproval(tx, review, { now, resolvedBy, note, addressTo = null }) {
     const targetEntityId = review.entityId;
     const sourceEntityId = review.relatedEntityId;
 
@@ -1183,7 +1233,7 @@ export class IdentityRepository {
           `Relocation review ${review.id} carries a relatedEntityId; refusing ambiguous entity merge.`
         );
       }
-      this._txApplyRelocation(tx, review, { now, resolvedBy, note });
+      this._txApplyRelocation(tx, review, { now, resolvedBy, note, addressTo });
       return;
     }
 
@@ -1308,13 +1358,15 @@ export class IdentityRepository {
    * observations. Audit stays on the review item's immutable evidence.
    * @private
    */
-  _txApplyRelocation(tx, review, { now, resolvedBy, note }) {
+  _txApplyRelocation(tx, review, { now, resolvedBy, note, addressTo = null }) {
     if (!review.relatedEntityId && !review.entityId) {
       throw new ValidationError(`Relocation review ${review.id} has no entity to update.`);
     }
     const entityId = review.entityId;
     const evidence = review.evidence && typeof review.evidence === 'object' ? review.evidence : {};
-    const newAddress = evidence.addressTo || null;
+    // The approved new address defaults to the address persisted in the review
+    // evidence (Phase 16 default), but an operator-supplied value may override it.
+    const newAddress = addressTo || evidence.addressTo || null;
     if (!newAddress) {
       throw new ValidationError(
         `Relocation review ${review.id} has no approved new address (evidence.addressTo missing); cannot update canonical location.`
