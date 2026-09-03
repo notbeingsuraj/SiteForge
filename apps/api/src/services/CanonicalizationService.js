@@ -11,6 +11,7 @@
 
 import { Source, Evidence, Claim, Conflict, SourceIndependenceAnalyzer } from './EvidenceModels.js';
 import { normalizePhone, normalizeWebsite } from './EntityResolution.js';
+import { IdentityRepository } from '../db/IdentityRepository.js';
 
 /**
  * Field classification for conflict resolution
@@ -145,13 +146,15 @@ function shouldUpdateCanonical(existingCanonical, newObservation, isIdentitySens
 export class CanonicalizationService {
   /**
    * Create a new CanonicalizationService instance.
-   * @param {Object} dbInstance - Drizzle database instance
+   * @param {Object} repoOrDb - IdentityRepository or Drizzle database instance
    */
-  constructor(dbInstance) {
-    if (!dbInstance) {
-      throw new Error('Database instance is required');
+  constructor(repoOrDb) {
+    if (!repoOrDb) {
+      throw new Error('IdentityRepository or database instance is required');
     }
-    this.db = dbInstance;
+    this.repo = typeof repoOrDb.createObservation === 'function'
+      ? repoOrDb
+      : new IdentityRepository(repoOrDb);
   }
 
   /**
@@ -308,32 +311,50 @@ export class CanonicalizationService {
    * Store observation in database
    */
   async _storeObservation({ entityId, provider, providerRecordId, fieldPath, value, normalizedValue, provenance, confidence, sourceInfo }) {
-    // Implementation will use the database to store observations
-    // This is a simplified version - full implementation would use the schema tables
-    // For now, we just log the intent
-    console.log(`[Canonicalization] Stored observation: ${fieldPath} = ${value} (${provenance}, ${confidence})`);
+    return this.repo.createObservation({
+      entityId,
+      provider,
+      providerRecordId,
+      fieldPath,
+      value: typeof value === 'string' ? value : JSON.stringify(value),
+      normalizedValue: typeof normalizedValue === 'string' ? normalizedValue : JSON.stringify(normalizedValue),
+      provenance,
+      confidence,
+      sourceId: sourceInfo?.sourceId || null,
+    });
   }
 
   /**
    * Get current canonical field value
    */
   async _getCanonicalField(entityId, fieldPath) {
-    // Query canonical_field table
-    return null; // Simplified
+    return this.repo.getCanonicalField(entityId, fieldPath);
   }
 
   /**
    * Set canonical field value
    */
   async _setCanonicalField(entityId, fieldPath, observation) {
-    console.log(`[Canonicalization] Set canonical: ${fieldPath} = ${observation.value} (${observation.provenance})`);
+    return this.repo.upsertCanonicalField({
+      entityId,
+      fieldPath,
+      value: typeof observation.value === 'string' ? observation.value : JSON.stringify(observation.value),
+      provenance: observation.provenance,
+      confidence: observation.confidence,
+    });
   }
 
   /**
    * Upgrade canonical field provenance
    */
   async _upgradeCanonicalProvenance(entityId, fieldPath, observation) {
-    console.log(`[Canonicalization] Provenance upgrade: ${fieldPath} ${observation.provenance}`);
+    return this.repo.upsertCanonicalField({
+      entityId,
+      fieldPath,
+      value: typeof observation.value === 'string' ? observation.value : JSON.stringify(observation.value),
+      provenance: observation.provenance,
+      confidence: observation.confidence,
+    });
   }
 
   /**
