@@ -48,7 +48,6 @@ router.post('/analyze', async (req, res, next) => {
 
     // Provider chain returned nothing usable → 503 provider_unavailable
     const nothingUsable =
-      !business.identity?.name &&
       result.provider?.geoapify &&
       result.provider?.geoapify !== 'ok' &&
       (!business.contact?.phone && !business.contact?.website && !business.location?.address);
@@ -111,6 +110,7 @@ router.post('/analyze', async (req, res, next) => {
         confidence: business.confidence?.overall || 0,
         extractedAt: new Date().toISOString(),
         cached: false,
+        persistence: result.persistence,
         brandDNAStatus: brandStrategyStatus,
         validationIssues: result.validation?.issues?.length ? result.validation.issues.map((i) => i.field) : [],
       },
