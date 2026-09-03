@@ -24,7 +24,8 @@ import {
   Conflict,
   CanonicalField,
   Observation,
-  CanonicalizationDecision
+  CanonicalizationDecision,
+  ReviewItem
 } from './schema.js';
 
 // =============================================================================
@@ -913,6 +914,204 @@ export class IdentityRepository {
 
     const rows = this.db.select().from(CanonicalizationDecision).where(and(...conditions)).all();
     return rows.map(this._mapCanonicalizationDecisionRow);
+  }
+
+  // =========================================================================
+  // Phase 15: ReviewItem Operations (human-review queue)
+  // =========================================================================
+
+  /**
+   * Build a deterministic, timestamp-free deduplication key from the actual
+   * identity-resolution context so repeated research of the same unresolved
+   * situation reuses one review item instead of piling up duplicates.
+   *
+   * Two shapes:
+   *  - pairwise: keyed on the (provider, providerRecordId) pair (order-independent)
+   *    + matchType — used when two provider records are compared in one request.
+   *  - temporal: keyed on entityId + normalized old->new address transition +
+   *    matchType — used for cross-time relocation detection.
+   *
+   * Unrelated entities produce different keys (different provider records /
+   * different entity + address), so similar names never collapse into one review.
+   *
+   * @param {Object} ctx
+   * @returns {string} deterministic dedupe key
+   */
+  buildReviewDedupeKey(ctx = {}) {
+    const norm = (s) => (s == null ? '' : String(s).trim().toLowerCase());
+    const matchType = norm(ctx.matchType);
+
+    if (ctx.providerA || ctx.providerB || ctx.providerRecordIdA || ctx.providerRecordIdB) {
+      const a = `${norm(ctx.providerA)}:${norm(ctx.providerRecordIdA)}`;
+      const b = `${norm(ctx.providerB)}:${norm(ctx.providerRecordIdB)}`;
+      const [x, y] = [a, b].sort();
+      return `pair|${x}|${y}|${matchType}`;
+    }
+
+    const entity = norm(ctx.entityId);
+    const from = norm(ctx.addressFrom);
+    const to = norm(ctx.addressTo);
+    return `temporal|${entity}|${from}->${to}|${matchType}`;
+  }
+
+  /**
+   * Create a review item, idempotently. If a review already exists for the
+   * computed dedupe key it is returned unchanged (no duplicate, no churn).
+   *
+   * @param {Object} data - { entityId, matchType, dedupeKey?, matchScore?, reason?,
+   *   evidence?, relatedEntityId?, provider?, providerRecordId?, relatedProvider?,
+   *   relatedProviderRecordId?, dedupeContext? }
+   * @returns {Object} review item (existing or newly created)
+   */
+  createReviewItem(data) {
+    if (!data?.entityId || typeof data.entityId !== 'string') {
+      throw new ValidationError('entityId is required and must be a string');
+    }
+    if (!data?.matchType || typeof data.matchType !== 'string') {
+      throw new ValidationError('matchType is required and must be a string');
+    }
+
+    const entity = this.getEntityById(data.entityId);
+    if (!entity) {
+      throw new NotFoundError(`Entity ${data.entityId} not found`);
+    }
+
+    const dedupeKey =
+      data.dedupeKey ||
+      this.buildReviewDedupeKey({ ...(data.dedupeContext || {}), entityId: data.entityId, matchType: data.matchType });
+
+    // Idempotency: reuse the existing review for this context if present.
+    const existing = this.getReviewItemByDedupeKey(dedupeKey);
+    if (existing) return existing;
+
+    const id = `rev_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+    const now = new Date().toISOString();
+    const row = {
+      id,
+      dedupeKey,
+      entityId: data.entityId,
+      relatedEntityId: data.relatedEntityId || null,
+      provider: data.provider || null,
+      providerRecordId: data.providerRecordId || null,
+      relatedProvider: data.relatedProvider || null,
+      relatedProviderRecordId: data.relatedProviderRecordId || null,
+      matchType: data.matchType,
+      matchScore: typeof data.matchScore === 'number' ? data.matchScore : null,
+      reason: data.reason || null,
+      evidence: data.evidence != null ? JSON.stringify(data.evidence) : null,
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+      resolvedAt: null,
+      resolvedBy: null,
+      resolutionNote: null,
+    };
+
+    try {
+      this.db.insert(ReviewItem).values(row).run();
+    } catch (err) {
+      // Concurrent creation race on the unique dedupe key: reuse the winner.
+      if (err.message && err.message.includes('UNIQUE constraint failed')) {
+        const winner = this.getReviewItemByDedupeKey(dedupeKey);
+        if (winner) return winner;
+      }
+      throw err;
+    }
+
+    return this._mapReviewItemRow(row);
+  }
+
+  /**
+   * Get a review item by primary key.
+   */
+  getReviewItem(id) {
+    if (!id || typeof id !== 'string') return null;
+    const rows = this.db.select().from(ReviewItem).where(eq(ReviewItem.id, id)).all();
+    return rows.length > 0 ? this._mapReviewItemRow(rows[0]) : null;
+  }
+
+  /**
+   * Get a review item by its deterministic dedupe key.
+   */
+  getReviewItemByDedupeKey(dedupeKey) {
+    if (!dedupeKey || typeof dedupeKey !== 'string') return null;
+    const rows = this.db.select().from(ReviewItem).where(eq(ReviewItem.dedupeKey, dedupeKey)).all();
+    return rows.length > 0 ? this._mapReviewItemRow(rows[0]) : null;
+  }
+
+  /**
+   * List review items, optionally filtered by entity and/or status.
+   * @param {Object} [filter] - { entityId?, status? }
+   * @returns {Object[]} review items (oldest first)
+   */
+  getReviewItems(filter = {}) {
+    const conditions = [];
+    if (filter.entityId) conditions.push(eq(ReviewItem.entityId, filter.entityId));
+    if (filter.status) conditions.push(eq(ReviewItem.status, filter.status));
+
+    const query = this.db.select().from(ReviewItem);
+    const rows = (conditions.length > 0 ? query.where(and(...conditions)) : query)
+      .orderBy(ReviewItem.createdAt)
+      .all();
+    return rows.map(this._mapReviewItemRow);
+  }
+
+  /**
+   * Resolve a pending review item (pending -> approved | rejected).
+   * Persists the reviewer decision. Does NOT touch canonical data or delete the
+   * original resolution evidence — a review decision is auditable and additive.
+   *
+   * @param {string} id
+   * @param {'approved'|'rejected'} status
+   * @param {Object} [options] - { resolvedBy?, note? }
+   * @returns {Object} updated review item
+   */
+  resolveReviewItem(id, status, options = {}) {
+    if (status !== 'approved' && status !== 'rejected') {
+      throw new ValidationError("status must be 'approved' or 'rejected'");
+    }
+    const existing = this.getReviewItem(id);
+    if (!existing) {
+      throw new NotFoundError(`Review item ${id} not found`);
+    }
+
+    const now = new Date().toISOString();
+    this.db
+      .update(ReviewItem)
+      .set({
+        status,
+        resolvedAt: now,
+        resolvedBy: options.resolvedBy || null,
+        resolutionNote: options.note || null,
+        updatedAt: now,
+      })
+      .where(eq(ReviewItem.id, id))
+      .run();
+
+    return this.getReviewItem(id);
+  }
+
+  _mapReviewItemRow(row) {
+    return {
+      id: row.id,
+      dedupeKey: row.dedupeKey,
+      entityId: row.entityId,
+      relatedEntityId: row.relatedEntityId,
+      provider: row.provider,
+      providerRecordId: row.providerRecordId,
+      relatedProvider: row.relatedProvider,
+      relatedProviderRecordId: row.relatedProviderRecordId,
+      matchType: row.matchType,
+      matchScore: row.matchScore,
+      reason: row.reason,
+      evidence: row.evidence ? JSON.parse(row.evidence) : null,
+      status: row.status,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      resolvedAt: row.resolvedAt,
+      resolvedBy: row.resolvedBy,
+      resolutionNote: row.resolutionNote,
+    };
   }
 
   /**

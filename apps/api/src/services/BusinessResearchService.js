@@ -16,6 +16,7 @@ import { calculateMatchScore } from './EntityResolution.js';
 import { initializeDatabase, getDb } from '../db/client.js';
 import { IdentityRepository, NotFoundError, DuplicateError, ValidationError } from '../db/IdentityRepository.js';
 import { CanonicalizationService } from './CanonicalizationService.js';
+import { analyzeEntityRelocation, TEMPORAL_VERDICT } from './TemporalRelocationAnalyzer.js';
 
 class BusinessResearchService {
   /**
@@ -592,6 +593,7 @@ class BusinessResearchService {
       let entityId = null;
       const providerIdentities = [];
       let resolutionRecord = null;
+      const reviewItems = [];
 
       // Primary observation determines the initial entity via provider lookup.
       const primary = observations[0];
@@ -723,6 +725,41 @@ class BusinessResearchService {
                   ? 'Providers describe distinct entities; kept separate.'
                   : 'Ambiguous match; provisional separate entity pending review.'),
             });
+
+            // Hook A (Phase 15): enqueue a human-review item for genuinely
+            // ambiguous pairwise resolutions. same_entity (merged into primary)
+            // and different_entity (confidently distinct) need no review; only
+            // same_brand_different_location and uncertain are queued. The
+            // resolution_record above remains the immutable evidence; this review
+            // is the separate, actionable state. Best-effort — a review-queue
+            // failure never breaks persistence, and the dedupe key keeps repeated
+            // research of the same pair from piling up duplicates.
+            if (!resolveToPrimary && (matchType === 'same_brand_different_location' || matchType === 'uncertain')) {
+              try {
+                const review = repo.createReviewItem({
+                  entityId,
+                  relatedEntityId: targetEntityId !== entityId ? targetEntityId : null,
+                  provider: primary.provider,
+                  providerRecordId: primary.providerRecordId || null,
+                  relatedProvider: secondary.provider,
+                  relatedProviderRecordId: secondary.providerRecordId || null,
+                  matchType,
+                  matchScore,
+                  reason: resolutionRecord?.notes || 'Ambiguous entity resolution pending human review.',
+                  evidence: { source: 'pairwise_resolution', matchType, matchScore },
+                  dedupeContext: {
+                    providerA: primary.provider,
+                    providerRecordIdA: primary.providerRecordId || null,
+                    providerB: secondary.provider,
+                    providerRecordIdB: secondary.providerRecordId || null,
+                    matchType,
+                  },
+                });
+                reviewItems.push(review);
+              } catch (reviewErr) {
+                console.error(`[ReviewQueue] Failed to enqueue pairwise review (best-effort): ${reviewErr?.message || String(reviewErr)}`);
+              }
+            }
           }
         }
       }
@@ -783,11 +820,50 @@ class BusinessResearchService {
         }
       }
 
+      // Hook B (Phase 15): temporal relocation analysis over the entity's full,
+      // now-persisted observation history (durable across restarts). A genuine
+      // old->new move carrying stable identity is queued as `relocated_entity`;
+      // a simultaneous two-address branch is queued as
+      // `same_brand_different_location`. `uncertain` (insufficient history) is
+      // intentionally NOT queued so the common null case does not flood the
+      // queue. This never merges entities and never mutates canonical data.
+      // Best-effort — a failure here never breaks persistence.
+      if (entityId) {
+        try {
+          const temporal = analyzeEntityRelocation(repo, entityId);
+          if (
+            temporal.verdict === TEMPORAL_VERDICT.RELOCATED ||
+            temporal.verdict === TEMPORAL_VERDICT.SAME_BRAND_DIFFERENT_LOCATION
+          ) {
+            const reviewMatchType =
+              temporal.verdict === TEMPORAL_VERDICT.RELOCATED
+                ? 'relocated_entity'
+                : 'same_brand_different_location';
+            const review = repo.createReviewItem({
+              entityId,
+              matchType: reviewMatchType,
+              reason: temporal.reason,
+              evidence: { source: 'temporal_analysis', verdict: temporal.verdict, ...temporal.evidence },
+              dedupeContext: {
+                entityId,
+                addressFrom: temporal.evidence?.addressFrom || null,
+                addressTo: temporal.evidence?.addressTo || null,
+                matchType: reviewMatchType,
+              },
+            });
+            reviewItems.push(review);
+          }
+        } catch (temporalErr) {
+          console.error(`[ReviewQueue] Temporal relocation analysis failed (best-effort): ${temporalErr?.message || String(temporalErr)}`);
+        }
+      }
+
       return {
         status: 'ok',
         entityId,
         providerIdentities,
         resolutionRecord,
+        reviewItems,
       };
     } catch (err) {
       if (err instanceof DuplicateError) {
@@ -808,6 +884,7 @@ class BusinessResearchService {
                   entityId: existing.entityId,
                   providerIdentities: [existing],
                   resolutionRecord: null,
+                  reviewItems: [],
                   recoveredFromDuplicate: true,
                 };
               }

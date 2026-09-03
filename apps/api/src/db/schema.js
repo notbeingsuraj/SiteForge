@@ -254,6 +254,45 @@ export const CanonicalizationDecision = sqliteTable('canonicalization_decision',
 }));
 
 // =============================================================================
+// Phase 15: ReviewItem — Lightweight human-review queue for ambiguous resolutions
+// =============================================================================
+// Layered ON TOP of resolution_record (which remains the immutable audit log of
+// evidence). A ReviewItem is the *actionable* review state: created when a
+// resolution is ambiguous (same_brand_different_location / relocated_entity /
+// uncertain), deduplicated on a deterministic identity-resolution context key so
+// repeated research does not pile up duplicates, and resolved by a reviewer
+// (pending -> approved | rejected). Resolving a review NEVER overwrites canonical
+// data; the original resolution_record evidence is preserved.
+export const ReviewItem = sqliteTable('review_item', {
+  id: text('id').primaryKey(),
+  // Deterministic dedupe key derived from the resolution context (provider
+  // records / entity + address transition + matchType), NOT timestamps. Unique.
+  dedupeKey: text('dedupe_key').notNull(),
+  // The owning/primary entity. FK cascade keeps reviews isolated per entity.
+  entityId: text('entity_id').notNull().references(() => BusinessEntity.entityId, { onDelete: 'cascade' }),
+  // The other entity involved (if one was created); informational, nullable.
+  relatedEntityId: text('related_entity_id'),
+  provider: text('provider'),
+  providerRecordId: text('provider_record_id'),
+  relatedProvider: text('related_provider'),
+  relatedProviderRecordId: text('related_provider_record_id'),
+  matchType: text('match_type').notNull(), // same_brand_different_location | relocated_entity | uncertain
+  matchScore: real('match_score'),
+  reason: text('reason'),
+  evidence: text('evidence', { mode: 'json' }), // structured signals / temporal verdict
+  status: text('status', { enum: ['pending', 'approved', 'rejected'] }).notNull().default('pending'),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  resolvedAt: text('resolved_at'),
+  resolvedBy: text('resolved_by'),
+  resolutionNote: text('resolution_note'),
+}, (table) => ({
+  dedupeUnique: index('review_item_dedupe_unique').on(table.dedupeKey),
+  entityIdx: index('review_item_entity_idx').on(table.entityId),
+  statusIdx: index('review_item_status_idx').on(table.status),
+}));
+
+// =============================================================================
 // Schema Validation
 // =============================================================================
 export function validateSchema() {
@@ -278,5 +317,6 @@ export default {
   CanonicalField,
   Observation,
   CanonicalizationDecision,
+  ReviewItem,
   validateSchema,
 };

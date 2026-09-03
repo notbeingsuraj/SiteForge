@@ -423,8 +423,46 @@ function createTables(db) {
 
   // Index for BusinessEntity
   db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_business_entity_status 
+    CREATE INDEX IF NOT EXISTS idx_business_entity_status
     ON business_entity(status)
+  `);
+
+  // Phase 15: ReviewItem table (human-review queue for ambiguous resolutions)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS review_item (
+      id TEXT PRIMARY KEY,
+      dedupe_key TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      related_entity_id TEXT,
+      provider TEXT,
+      provider_record_id TEXT,
+      related_provider TEXT,
+      related_provider_record_id TEXT,
+      match_type TEXT NOT NULL,
+      match_score REAL,
+      reason TEXT,
+      evidence TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      resolved_at TEXT,
+      resolved_by TEXT,
+      resolution_note TEXT,
+      FOREIGN KEY (entity_id) REFERENCES business_entity(entity_id) ON DELETE CASCADE
+    )
+  `);
+
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_review_item_dedupe
+    ON review_item(dedupe_key)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_review_item_entity ON review_item(entity_id)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_review_item_status ON review_item(status)
   `);
 }
 
