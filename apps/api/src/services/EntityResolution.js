@@ -1,6 +1,6 @@
 /**
  * Entity Resolution Engine
- * 
+ *
  * Resolves business entity identity across multiple provider records.
  * Determines which real-world entity the available evidence refers to,
  * quantifies uncertainty, preserves competing candidates, and prevents
@@ -64,6 +64,52 @@ const DISTANCE_THRESHOLDS = {
   COORDINATE_SAME_BUILDING_METERS: 50,
 };
 
+// Classification tuning.
+//
+// NAME_STRONG_SIMILARITY: the fuzzy-name threshold above which two names are
+//   treated as the *same brand identity* (used for chain / relocation detection).
+// SAME_ENTITY_MIN_SCORE: minimum coverage-adjusted score to declare same_entity.
+// LOCATION_SAME_MIN_SIM / LOCATION_STREET_NUMBER_MIN_SIM: address-token
+//   thresholds used by compareLocations() to decide "same place" vs "moved".
+// COVERAGE_FLOOR: floor of the evidence-coverage multiplier applied to the
+//   positive score, so that records missing core identity fields cannot reach
+//   the same confidence as fully-corroborated records (Step 4C — evidence
+//   coverage, not a flat per-null penalty).
+const CLASSIFICATION = {
+  NAME_STRONG_SIMILARITY: 0.9,
+  SAME_ENTITY_MIN_SCORE: 0.85,
+  UNCERTAIN_MIN_SCORE: 0.50,
+  LOCATION_SAME_MIN_SIM: 0.9,
+  LOCATION_STREET_NUMBER_MIN_SIM: 0.5,
+  COVERAGE_FLOOR: 0.8,
+};
+
+// Core identity fields whose *comparability* (present on both records) drives
+// the evidence-coverage confidence multiplier.
+const CORE_IDENTITY_FIELDS = ['name', 'phone', 'website', 'address'];
+
+// Common US street-type abbreviations, expanded before address comparison so
+// that "600 Guerrero St" and "600 Guerrero Street" are recognised as the same
+// place. This is normalization for the *location comparison only* — it does not
+// change the address scoring signal.
+const STREET_TYPE_EXPANSIONS = {
+  st: 'street', str: 'street',
+  ave: 'avenue', av: 'avenue',
+  blvd: 'boulevard',
+  rd: 'road',
+  dr: 'drive',
+  ln: 'lane',
+  ct: 'court',
+  pl: 'place',
+  sq: 'square',
+  ste: 'suite',
+  fl: 'floor',
+  hwy: 'highway',
+  pkwy: 'parkway',
+  ter: 'terrace',
+  cir: 'circle',
+};
+
 // Helper functions (defined once, exported)
 export function normalizePhone(phone) {
   if (!phone) return null;
@@ -108,16 +154,16 @@ export function fuzzySimilarity(str1, str2) {
   const s1 = str1.toLowerCase().trim();
   const s2 = str2.toLowerCase().trim();
   if (s1 === s2) return 1.0;
-  
+
   const longer = s1.length > s2.length ? s1 : s2;
   const shorter = s1.length > s2.length ? s2 : s1;
   if (longer.length === 0) return 1.0;
-  
+
   const prefixLen = Math.min(3, shorter.length);
   if (longer.startsWith(shorter.slice(0, prefixLen))) {
     return 0.8 + 0.2 * (shorter.length / longer.length);
   }
-  
+
   const set1 = new Set(s1.split(''));
   const set2 = new Set(s2.split(''));
   const intersection = new Set([...set1].filter(x => set2.has(x)));
@@ -126,16 +172,74 @@ export function fuzzySimilarity(str1, str2) {
 }
 
 /**
+ * Tokenize an address, lower-casing, stripping punctuation and expanding common
+ * street-type abbreviations. Used only for location comparison (not scoring).
+ */
+function normalizeAddressTokens(addr) {
+  return addr
+    .toLowerCase()
+    .replace(/[.,#]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((t) => STREET_TYPE_EXPANSIONS[t] || t);
+}
+
+/**
+ * Decide whether two records describe the SAME physical location, a DIFFERENT
+ * one, or whether location is UNKNOWN (not comparable).
+ *
+ * Coordinates are authoritative when both records have them. Otherwise we fall
+ * back to the address: identical (post-normalization) token similarity means
+ * same place; a matching leading street number with moderate similarity also
+ * means same place (tolerates abbreviated city/suffix); anything else with both
+ * addresses present is treated as a different location.
+ *
+ * This is what separates a genuine relocation ("600 Guerrero" -> "123 New St")
+ * from a same-entity record with an abbreviated address ("600 Guerrero Street"
+ * vs "600 Guerrero St, SF") — the latter shares the street number and most
+ * tokens, the former does not.
+ *
+ * @returns {'same'|'different'|'unknown'}
+ */
+function compareLocations(addr1, addr2, coords1, coords2) {
+  if (coords1?.lat && coords1?.lng && coords2?.lat && coords2?.lng) {
+    const dist = calculateDistance(coords1.lat, coords1.lng, coords2.lat, coords2.lng);
+    return dist <= DISTANCE_THRESHOLDS.COORDINATE_NEAR_METERS ? 'same' : 'different';
+  }
+
+  if (addr1 && addr2) {
+    const t1 = normalizeAddressTokens(addr1);
+    const t2 = normalizeAddressTokens(addr2);
+    const s1 = new Set(t1);
+    const s2 = new Set(t2);
+    const inter = [...s1].filter((x) => s2.has(x)).length;
+    const uni = new Set([...t1, ...t2]).size;
+    const sim = uni > 0 ? inter / uni : 0;
+
+    if (sim >= CLASSIFICATION.LOCATION_SAME_MIN_SIM) return 'same';
+
+    const num1 = t1.find((t) => /^\d+$/.test(t));
+    const num2 = t2.find((t) => /^\d+$/.test(t));
+    if (num1 && num2 && num1 === num2 && sim >= CLASSIFICATION.LOCATION_STREET_NUMBER_MIN_SIM) {
+      return 'same';
+    }
+    return 'different';
+  }
+
+  return 'unknown';
+}
+
+/**
  * Calculate match score between two entity records
  * @param {Object} record1 - First entity record
  * @param {Object} record2 - Second entity record
- * @returns {Object} { score, signals, contradictions }
+ * @returns {Object} { score, signals, contradictions, matchType }
  */
 export function calculateMatchScore(record1, record2) {
   let score = 0;
   const signals = {};
   const contradictions = [];
-  
+
   // Phone matching
   const phone1 = normalizePhone(record1?.contact?.phone || record1?.phone);
   const phone2 = normalizePhone(record2?.contact?.phone || record2?.phone);
@@ -148,7 +252,7 @@ export function calculateMatchScore(record1, record2) {
       score -= 0.25;
     }
   }
-  
+
   // Website matching
   const website1 = normalizeWebsite(record1?.contact?.website || record1?.website);
   const website2 = normalizeWebsite(record2?.contact?.website || record2?.website);
@@ -160,7 +264,7 @@ export function calculateMatchScore(record1, record2) {
       contradictions.push({ field: 'website', v1: website1, v2: website2 });
     }
   }
-  
+
   // Domain matching
   const domain1 = normalizeWebsite(record1?.contact?.website || record1?.website);
   const domain2 = normalizeWebsite(record2?.contact?.website || record2?.website);
@@ -170,7 +274,7 @@ export function calculateMatchScore(record1, record2) {
       signals.domain_exact = true;
     }
   }
-  
+
   // Coordinate matching
   const coords1 = record1?.location?.coordinates || record1?.coordinates;
   const coords2 = record2?.location?.coordinates || record2?.coordinates;
@@ -185,7 +289,7 @@ export function calculateMatchScore(record1, record2) {
             Math.sin(Δλ/2) * Math.sin(Δλ/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     const dist = 6371000 * c;
-    
+
     if (dist <= 10) {
       score += 0.30;
       signals.coordinates_exact = true;
@@ -198,7 +302,7 @@ export function calculateMatchScore(record1, record2) {
     }
     signals.coordinate_distance_meters = Math.round(dist);
   }
-  
+
   // Address matching
   const addr1 = record1?.location?.full_address || record1?.address;
   const addr2 = record2?.location?.full_address || record2?.address;
@@ -208,7 +312,7 @@ export function calculateMatchScore(record1, record2) {
     const intersection = new Set([...set1].filter(x => set2.has(x)));
     const union = new Set([...set1, ...set2]);
     const addrSim = intersection.size / union.size;
-    
+
     if (addrSim >= 0.9) {
       score += 0.30;
       signals.address_exact = true;
@@ -220,7 +324,7 @@ export function calculateMatchScore(record1, record2) {
       score -= 0.25;
     }
   }
-  
+
   // City/State matching
   const city1 = record1?.location?.city;
   const city2 = record2?.location?.city;
@@ -234,12 +338,13 @@ export function calculateMatchScore(record1, record2) {
     score += 0.05;
     signals.state_match = true;
   }
-  
+
   // Name matching
   const name1 = record1?.identity?.name || record1?.name;
   const name2 = record2?.identity?.name || record2?.name;
+  let nameSim = 0;
   if (name1 && name2) {
-    const nameSim = fuzzySimilarity(name1, name2);
+    nameSim = fuzzySimilarity(name1, name2);
     if (name1.toLowerCase() === name2.toLowerCase()) {
       score += 0.35;
       signals.name_exact = true;
@@ -251,7 +356,7 @@ export function calculateMatchScore(record1, record2) {
       score -= 0.30;
     }
   }
-  
+
   // Place ID matching
   const placeId1 = record1?.source?.placeId || record1?.provider?.placeId;
   const placeId2 = record2?.source?.placeId || record2?.provider?.placeId;
@@ -261,7 +366,7 @@ export function calculateMatchScore(record1, record2) {
       signals.place_id_match = true;
     }
   }
-  
+
   // CID matching
   const cid1 = record1?.source?.placeId?.startsWith('cid:') ? record1.source.placeId : null;
   const cid2 = record2?.source?.placeId?.startsWith('cid:') ? record2.source.placeId : null;
@@ -269,7 +374,7 @@ export function calculateMatchScore(record1, record2) {
     score += 0.35;
     signals.cid_match = true;
   }
-  
+
   // Category matching
   const cat1 = record1?.identity?.category || record1?.category;
   const cat2 = record2?.identity?.category || record2?.category;
@@ -285,31 +390,150 @@ export function calculateMatchScore(record1, record2) {
       score -= 0.15;
     }
   }
-  
-  const finalScore = Math.max(-1, Math.min(1, score));
-  
-  function classifyMatchType(score, contradictions) {
-    if (contradictions.length > 0) {
-      const criticalFields = ['name', 'address', 'phone'];
-      const hasCriticalContradiction = contradictions.some(c => 
-        ['name', 'address', 'phone'].includes(c.field)
-      );
-      if (hasCriticalContradiction) return 'different_entity';
-    }
-    
-    if (score >= 0.85) return 'same_entity';
-    if (score >= 0.70) return 'same_brand_different_location';
-    if (score >= 0.50) return 'uncertain';
-    if (score >= 0.30) return 'different_entity';
-    return 'different_entity';
+
+  // ===== Evidence coverage (Step 4C) =====
+  // Confidence must reflect how much of the core identity we could actually
+  // compare. A record missing a core field is NOT contradicted (missing != wrong),
+  // so we never add a contradiction for it; instead we scale the *positive* score
+  // by an evidence-coverage multiplier. This prevents a couple of matching fields
+  // with nothing to contradict them from reaching the same confidence as a fully
+  // corroborated match — without any arbitrary per-null penalty.
+  const corePresent = {
+    name: !!(name1 && name2),
+    phone: !!(phone1 && phone2),
+    website: !!(website1 && website2),
+    address: !!(addr1 && addr2),
+  };
+  const comparableCore = CORE_IDENTITY_FIELDS.filter((f) => corePresent[f]).length;
+  const coverage = comparableCore / CORE_IDENTITY_FIELDS.length;
+  const coverageFactor =
+    CLASSIFICATION.COVERAGE_FLOOR + (1 - CLASSIFICATION.COVERAGE_FLOOR) * coverage;
+
+  let adjustedScore = Math.max(-1, Math.min(1, score));
+  if (adjustedScore > 0 && coverage < 1) {
+    adjustedScore = adjustedScore * coverageFactor;
   }
-  
+  const finalScore = Math.max(-1, Math.min(1, adjustedScore));
+  signals.evidence_coverage = parseFloat(coverage.toFixed(2));
+
+  // ===== Classification context =====
+  const nameExact = !!signals.name_exact;
+  const nameStrong = nameExact || nameSim >= CLASSIFICATION.NAME_STRONG_SIMILARITY;
+  // Whether the name could be compared at all. When a name is absent/unreadable
+  // on either side we must not *require* a strong name to declare same_entity —
+  // otherwise records that legitimately match on every other hard identifier
+  // (phone/domain/coordinates) at the same location would be split apart. We
+  // still require nameStrong when the name IS comparable on both sides.
+  const nameComparable = corePresent.name;
+  const phoneExact = !!signals.phone_exact;
+  const phoneConflict = !!(phone1 && phone2 && phone1 !== phone2);
+  // normalizeWebsite() returns the host, so website_exact and domain_exact are
+  // the same corroboration here; treat either as a shared web domain.
+  const domainSame = !!(signals.domain_exact || signals.website_exact);
+  const location = compareLocations(addr1, addr2, coords1, coords2);
+  const hasHardIdentifier = !!(
+    signals.phone_exact ||
+    signals.domain_exact ||
+    signals.website_exact ||
+    signals.place_id_match ||
+    signals.cid_match ||
+    signals.coordinates_exact ||
+    signals.coordinates_near
+  );
+
+  const matchType = classifyMatchType(finalScore, contradictions, {
+    nameStrong,
+    nameComparable,
+    phoneExact,
+    phoneConflict,
+    domainSame,
+    location,
+    hasHardIdentifier,
+  });
+
   return {
-    score: Math.max(-1, Math.min(1, score)),
+    score: finalScore,
     signals,
     contradictions,
-    matchType: classifyMatchType(score, contradictions)
+    matchType,
   };
+}
+
+/**
+ * Classify the relationship between two records from the accumulated evidence.
+ *
+ * Order matters: the two "same brand" / "relocation" patterns are checked
+ * before the generic critical-contradiction rule, because both patterns
+ * legitimately contain a signal (a differing local phone, a changed address)
+ * that the generic rule would otherwise treat as proof of a different entity.
+ *
+ * @param {number} score - coverage-adjusted, clamped score
+ * @param {Array}  contradictions
+ * @param {Object} ctx - { nameStrong, phoneExact, phoneConflict, domainSame,
+ *                          location, hasHardIdentifier }
+ * @returns {string} one of ENTITY_MATCH_TYPE values
+ */
+function classifyMatchType(score, contradictions, ctx) {
+  const {
+    nameStrong,
+    nameComparable,
+    phoneExact,
+    phoneConflict,
+    domainSame,
+    location,
+    hasHardIdentifier,
+  } = ctx;
+
+  const hasCriticalContradiction = contradictions.some((c) =>
+    ['name', 'address', 'phone'].includes(c.field)
+  );
+
+  // (1) SAME BRAND, DIFFERENT LOCATION.
+  //   Same brand identity (strong name + shared web domain) at a DIFFERENT
+  //   location, with a DIFFERENT local phone. The differing local phone is the
+  //   discriminator from a relocation (which keeps the same phone). Requires an
+  //   affirmatively different location, so it can never fire on a same-address
+  //   record.
+  if (nameStrong && domainSame && location === 'different' && phoneConflict) {
+    return 'same_brand_different_location';
+  }
+
+  // (2) RELOCATED ENTITY.
+  //   Stable identity preserved — strong name + SAME phone + shared web domain —
+  //   but a DIFFERENT location. Relocation is inferred only from strong stable
+  //   identifiers plus a location change, never from name + address alone.
+  if (nameStrong && phoneExact && domainSame && location === 'different') {
+    return 'relocated_entity';
+  }
+
+  // (3) CRITICAL CONTRADICTION with no brand/relocation explanation.
+  if (hasCriticalContradiction) {
+    return 'different_entity';
+  }
+
+  // (4) SAME ENTITY.
+  //   Requires corroboration on BOTH a matching physical location AND a hard
+  //   identifier (phone / domain / coordinates / place id), and an adequate
+  //   coverage-adjusted score. When the name is comparable on both sides it must
+  //   also be strong; when the name is absent/unreadable we do not manufacture a
+  //   name requirement and instead rely on the location + hard identifier. A
+  //   record that cannot confirm the location (missing on one side) or lacks a
+  //   hard identifier cannot reach same_entity — it falls through to uncertain.
+  if (
+    score >= CLASSIFICATION.SAME_ENTITY_MIN_SCORE &&
+    (nameStrong || !nameComparable) &&
+    location === 'same' &&
+    hasHardIdentifier
+  ) {
+    return 'same_entity';
+  }
+
+  // (5) Positive-but-incomplete evidence is uncertain; weak evidence (below the
+  //   uncertain floor) is a different entity. This band boundary is unchanged
+  //   from the original classifier, so contradictory/weak cases are not
+  //   reclassified.
+  if (score >= CLASSIFICATION.UNCERTAIN_MIN_SCORE) return 'uncertain';
+  return 'different_entity';
 }
 
 export default {};
