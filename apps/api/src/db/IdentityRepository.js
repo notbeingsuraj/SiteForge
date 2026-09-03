@@ -127,6 +127,19 @@ export class IdentityRepository {
   }
 
   /**
+   * Remove a newly-created entity that failed to acquire its provider mapping.
+   * Used for duplicate-insertion recovery; dependent rows cascade by schema.
+   */
+  deleteEntity(entityId) {
+    if (!entityId || typeof entityId !== 'string') return false;
+    const result = this.db
+      .delete(BusinessEntity)
+      .where(eq(BusinessEntity.entityId, entityId))
+      .run();
+    return result.changes > 0;
+  }
+
+  /**
    * Update fields on a BusinessEntity.
    * Only supplied fields are updated; unspecified fields are preserved.
    * 

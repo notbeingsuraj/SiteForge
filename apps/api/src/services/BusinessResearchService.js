@@ -544,6 +544,7 @@ class BusinessResearchService {
    */
   async _persistIdentity(profile, hints, sourceUrl, geoapifyRecord, webRecord) {
     let repo;
+    let transientEntityId = null;
     try {
       // Lazily initialize DB (safe if the raw connection already exists)
       const db = (() => {
@@ -627,6 +628,7 @@ class BusinessResearchService {
           category: this._canonicalCategory(primary.record) || null,
         });
         entityId = entity.entityId;
+        transientEntityId = entityId;
 
         if (primary.providerRecordId) {
           const mapping = repo.createProviderIdentity({
@@ -796,6 +798,9 @@ class BusinessResearchService {
             try {
               const existing = repo.findProviderIdentity(obs.provider, obs.providerRecordId);
               if (existing) {
+                if (transientEntityId && transientEntityId !== existing.entityId) {
+                  repo.deleteEntity(transientEntityId);
+                }
                 profile.setEntityId(existing.entityId);
                 return {
                   status: 'ok',

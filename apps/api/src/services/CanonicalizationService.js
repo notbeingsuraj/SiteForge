@@ -390,6 +390,18 @@ export class CanonicalizationService {
    */
   async _resolveConflict(entityId, fieldPath, chosen, rejected, strategy) {
     console.log(`[Canonicalization] Resolved conflict on ${fieldPath} using ${strategy}: "${rejected.value}" -> "${chosen.value}"`);
+    await this.repo.createConflict({
+      entityId,
+      fieldPath,
+      values: [
+        { value: rejected.value, provenance: rejected.provenance, confidence: rejected.confidence },
+        { value: chosen.value, provenance: chosen.provenance, confidence: chosen.confidence },
+      ],
+      status: 'resolved',
+      resolutionStrategy: strategy,
+      resolutionReason: 'Canonicalization selected the stronger observation.',
+      resolvedAt: new Date().toISOString(),
+    });
     return { fieldPath, strategy, chosen: chosen.value, rejected: rejected.value };
   }
 
@@ -398,6 +410,17 @@ export class CanonicalizationService {
    */
   async _recordConflict(entityId, fieldPath, existing, newObs, strategy) {
     console.log(`[Canonicalization] Recorded conflict on ${fieldPath} with strategy ${strategy}`);
+    await this.repo.createConflict({
+      entityId,
+      fieldPath,
+      values: [
+        { value: existing.value, provenance: existing.provenance, confidence: existing.confidence },
+        { value: newObs.value, provenance: newObs.provenance, confidence: newObs.confidence },
+      ],
+      status: 'conflicted',
+      resolutionStrategy: strategy,
+      resolutionReason: 'Identity-sensitive conflict preserved for review.',
+    });
     return { fieldPath, status: 'conflicted', existing: existing.value, new: newObs.value };
   }
 }
