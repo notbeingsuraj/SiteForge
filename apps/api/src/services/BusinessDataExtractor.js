@@ -700,6 +700,8 @@ Rules:
     }
     if (extractedProfile.social_links?.length) {
       profile.set('social_links', extractedProfile.social_links, 'discovered', 0.5, { sourceUrl: pageData?.url || googleMapsUrl });
+    }
+
     // Step 4: Build an AcquisitionResult from the extraction (before merging
     // into BusinessProfile). This gives us a clean internal contract we can
     // reason about.
