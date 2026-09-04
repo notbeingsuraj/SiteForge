@@ -700,6 +700,47 @@ Rules:
     }
     if (extractedProfile.social_links?.length) {
       profile.set('social_links', extractedProfile.social_links, 'discovered', 0.5, { sourceUrl: pageData?.url || googleMapsUrl });
+    // Step 4: Build an AcquisitionResult from the extraction (before merging
+    // into BusinessProfile). This gives us a clean internal contract we can
+    // reason about.
+    const acquisition = this.buildAcquisitionResult({
+      provider: 'web_extraction',
+      sourceUrl: pageData?.url || googleMapsUrl,
+      extractedProfile,
+      pageData,
+      metadata,
+      identified,
+      provenance,
+      acquisitionMethod,
+    });
+
+    // If the acquisition has no identity evidence, do NOT merge into profile,
+    // do NOT create a BusinessProfile, do NOT persist. Return a structured
+    // acquisition failure instead of "Unknown Business".
+    if (!acquisition.fields || !hasIdentityEvidence(acquisition.fields)) {
+      return {
+        ...acquisition,
+        success: false,
+        metadata: {
+          ...provenance,
+          placeId: identified.placeId,
+          placeName: identified.placeName,
+          extractedAt: new Date().toISOString(),
+          httpStatus: pageData?.status,
+          hasJsonLd: metadata?.jsonLd?.length > 0,
+          hasMicrodata: Object.keys(metadata?.microdata || {}).length > 0,
+          hasOpenGraph: Object.keys(metadata?.openGraph || {}).length > 0,
+          acquisitionMethod,
+          resolutionStatus: 'unresolved',
+          provenanceBreakdown: { verified: 0, discovered: 0, identified: 0, user_provided: 0, inferred: 0 },
+          completeness: 0,
+          providerError: acquisition.errors?.[0] || null,
+          providerUnavailable: acquisition.status === ACQUISITION_STATUS.PROVIDER_UNAVAILABLE,
+          gateway: config.omniroute.baseUrl,
+          model: config.omniroute.models.reasoning,
+        },
+        cached: false,
+      };
     }
 
     // Step 4: Try to fetch official website for VERIFIED/DISCOVERED data
@@ -725,7 +766,7 @@ Rules:
       }
     }
 
-    // Step 5: Build final result
+    // Step 5: Build final result (only when we have real evidence)
     const providerFailure = Boolean(
       extractedProfile?.providerError ||
       extractedProfile?.providerUnavailable ||
@@ -751,6 +792,12 @@ Rules:
         providerUnavailable: Boolean(extractedProfile?.providerUnavailable),
         gateway: config.omniroute.baseUrl,
         model: config.omniroute.models.reasoning,
+        acquisition: {
+          status: acquisition.status,
+          completeness: acquisition.completeness,
+          fieldsPresent: acquisition.fields ? Object.keys(acquisition.fields).length : 0,
+          warnings: acquisition.warnings?.length || 0,
+        },
       },
       cached: false,
     };
@@ -760,6 +807,183 @@ Rules:
     }
 
     return result;
+  }
+
+  /**
+   * Detect pages that have a successful HTTP response but contain no business
+   * evidence (Google Maps JS shell, consent wall, server error, map tiles only).
+   * @private
+   */
+  isEmptyAcquisitionPage(metadata, sourceUrl) {
+    // r.jina.ai proxy sometimes returns 200 with a "Server error" page
+    if (metadata?.visibleText) {
+      const text = metadata.visibleText.toLowerCase();
+      if (text.includes('server error') && text.includes('try again later')) return true;
+      if (text.includes('enable javascript') && text.includes('browser') && text.includes('google')) return true;
+    }
+    // No structured data AND no meaningful visible text
+    const hasStructured = (metadata?.jsonLd?.length || 0) > 0
+      || Object.keys(metadata?.microdata || {}).length > 0
+      || Object.keys(metadata?.openGraph || {}).length > 0;
+    if (!hasStructured && (!metadata?.visibleText || metadata.visibleText.trim().length < 100)) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Build an empty extraction profile that satisfies the shape without AI call.
+   * @private
+   */
+  emptyExtractionProfile(googleMapsUrl, providerError) {
+    return {
+      business: { name: null, category: null, categories: [], description: null, business_type: null },
+      contact: { phone: null, email: null, website: null },
+      location: { full_address: null, street: null, city: null, state: null, country: null, postal_code: null, latitude: null, longitude: null },
+      ratings: { rating: null, review_count: null },
+      hours: {},
+      reviews: [],
+      services: [],
+      products: [],
+      amenities: [],
+      social_links: [],
+      pricing: null,
+      booking_url: null,
+      source_urls: [googleMapsUrl],
+      confidence: { overall: 0, name: 0, category: 0, phone: 0, website: 0, address: 0, rating: 0 },
+      providerError: {
+        category: providerError.category || 'PROVIDER_UNAVAILABLE',
+        httpStatus: providerError.httpStatus || null,
+        safeMessage: providerError.safeMessage || 'No business evidence extracted.',
+        retryAttempted: false,
+        retryCount: 0,
+        provider: providerError.provider || 'web_extraction',
+        model: providerError.model || 'auto/best-coding',
+        success: false,
+      },
+      providerUnavailable: true,
+      metadata: {
+        providerError,
+        providerUnavailable: true,
+        extractionStatus: 'provider_unavailable',
+      }
+    };
+  }
+
+  /**
+   * Build a structured AcquisitionResult from the extraction pipeline state.
+   * @private
+   */
+  buildAcquisitionResult({ provider, sourceUrl, extractedProfile, pageData, metadata, identified, provenance, acquisitionMethod }) {
+    // Provider-level error?
+    if (extractedProfile?.providerError) {
+      return classifyEmptyAcquisition({
+        provider,
+        sourceUrl,
+        record: extractedProfile,
+        providerError: extractedProfile.providerError,
+        httpStatus: pageData?.status,
+      });
+    }
+
+    // AI returned a profile — check whether it actually contains any fields.
+    if (extractedProfile) {
+      // Normalize extracted fields to dot-path for the AcquisitionResult contract.
+      const fields = this.flattenExtraction(extractedProfile);
+      const completeness = this.calculateCompleteness(extractedProfile);
+      const identityEvidence = hasIdentityEvidence(fields);
+      const confidence = extractedProfile.confidence?.overall || 0;
+
+      if (!identityEvidence) {
+        return classifyEmptyAcquisition({
+          provider,
+          sourceUrl,
+          record: extractedProfile,
+          providerError: null,
+          httpStatus: pageData?.status,
+        });
+      }
+
+      return {
+        provider,
+        sourceUrl,
+        status: ACQUISITION_STATUS.SUCCESS,
+        fields,
+        completeness,
+        confidence,
+        dataKind: 'inferred',
+        errors: [],
+        warnings: [],
+        latencyMs: null,
+        metadata: {
+          acquisitionMethod,
+          hasJsonLd: metadata?.jsonLd?.length > 0,
+          hasMicrodata: Object.keys(metadata?.microdata || {}).length > 0,
+          hasOpenGraph: Object.keys(metadata?.openGraph || {}).length > 0,
+          identified,
+          provenance,
+          acquisitionMethod,
+        },
+      };
+    }
+
+    // No profile at all.
+    return classifyEmptyAcquisition({ provider, sourceUrl, record: {}, providerError: null, httpStatus: pageData?.status });
+  }
+
+  /**
+   * Flatten the extractedProfile into dot-path fields for AcquisitionResult.
+   * @private
+   */
+  flattenExtraction(extractedProfile) {
+    if (!extractedProfile) return {};
+    const fields = {};
+    if (extractedProfile.business) {
+      if (extractedProfile.business.name) fields['identity.name'] = extractedProfile.business.name;
+      if (extractedProfile.business.category) fields['identity.category'] = extractedProfile.business.category;
+      if (extractedProfile.business.categories?.length) fields['identity.categories'] = extractedProfile.business.categories;
+      if (extractedProfile.business.description) fields['identity.description'] = extractedProfile.business.description;
+      if (extractedProfile.business.business_type) fields['identity.business_type'] = extractedProfile.business.business_type;
+    }
+    if (extractedProfile.contact) {
+      if (extractedProfile.contact.phone) fields['contact.phone'] = extractedProfile.contact.phone;
+      if (extractedProfile.contact.email) fields['contact.email'] = extractedProfile.contact.email;
+      if (extractedProfile.contact.website) fields['contact.website'] = extractedProfile.contact.website;
+    }
+    if (extractedProfile.location) {
+      if (extractedProfile.location.full_address) fields['location.full_address'] = extractedProfile.location.full_address;
+      if (extractedProfile.location.street) fields['location.street'] = extractedProfile.location.street;
+      if (extractedProfile.location.city) fields['location.city'] = extractedProfile.location.city;
+      if (extractedProfile.location.state) fields['location.state'] = extractedProfile.location.state;
+      if (extractedProfile.location.country) fields['location.country'] = extractedProfile.location.country;
+      if (extractedProfile.location.postal_code) fields['location.postal_code'] = extractedProfile.location.postal_code;
+      if (extractedProfile.location.coordinates) fields['location.coordinates'] = extractedProfile.location.coordinates;
+    }
+    if (extractedProfile.ratings) {
+      if (extractedProfile.ratings.rating != null) fields['ratings.rating'] = extractedProfile.ratings.rating;
+      if (extractedProfile.ratings.review_count != null) fields['ratings.review_count'] = extractedProfile.ratings.review_count;
+    }
+    if (extractedProfile.hours && Object.keys(extractedProfile.hours).some(k => extractedProfile.hours[k])) {
+      fields.hours = extractedProfile.hours;
+    }
+    if (extractedProfile.social_links?.length) fields['social_links'] = extractedProfile.social_links;
+    return fields;
+  }
+
+  /**
+   * Calculate overall completeness from the extracted profile.
+   * @private
+   */
+  calculateCompleteness(extractedProfile) {
+    const identityFields = ['business.name', 'contact.phone', 'contact.website', 'location.full_address', 'location.coordinates'];
+    let present = 0;
+    for (const f of identityFields) {
+      const parts = f.split('.');
+      let v = extractedProfile;
+      for (const p of parts) v = v?.[p];
+      if (v != null && v !== '') present++;
+    }
+    return present / identityFields.length;
   }
 
   /**
