@@ -27,6 +27,14 @@ import OfficialWebsiteProvider from './OfficialWebsiteProvider.js';
 import UserProvidedDataProvider from './UserProvidedDataProvider.js';
 import BusinessProfile from './BusinessProfile.js';
 import { config } from '../config/env.js';
+import {
+  createAcquisitionResult,
+  classifyEmptyAcquisition,
+  hasIdentityEvidence,
+  ACQUISITION_STATUS,
+  normalizeErrorCode
+} from './AcquisitionResult.js';
+import { normalizeField, stripObjectToString } from './FieldNormalizer.js';
 
 // In-memory cache (in production, use Redis or database)
 const extractionCache = new Map();
@@ -600,11 +608,25 @@ Rules:
       metadata = this.extractMetadata(pageData.html);
       metadata.sourceUrl = pageData.url;
 
-      // Use AI to extract structured profile from page content
-      extractedProfile = await this.extractWithAI(metadata, pageData.url);
-      
-      // Validate and clean
-      extractedProfile = this.validateProfile(extractedProfile);
+      // A JavaScript application shell, consent wall, map-tile response, or
+      // explicit upstream error is not business evidence. Do not spend an AI
+      // call on content that contains nothing the model can ground on.
+      if (this.isEmptyAcquisitionPage(metadata, pageData.url)) {
+        extractedProfile = this.emptyExtractionProfile(googleMapsUrl, {
+          category: 'EMPTY_RESULT',
+          safeMessage: 'The source responded, but no business evidence was available.',
+          httpStatus: pageData.status,
+          provider: 'web_extraction',
+          model: config.omniroute.models.reasoning,
+          success: false,
+        });
+      } else {
+        // Use AI to extract structured profile from page content
+        extractedProfile = await this.extractWithAI(metadata, pageData.url);
+
+        // Validate and clean
+        extractedProfile = this.validateProfile(extractedProfile);
+      }
       
       // Determine resolution status
       if (identified.placeId && this.parser.isValidPlaceIdFormat(identified.placeId)) {
