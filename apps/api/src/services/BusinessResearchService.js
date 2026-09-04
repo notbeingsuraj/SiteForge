@@ -1283,6 +1283,59 @@ class BusinessResearchService {
     if (!email) unknowns.push('email');
     return unknowns;
   }
+
+  // ===========================================================================
+  // PHASE 18: Re-run affected research after a resolved identity review.
+  //
+  // Closes the intelligence loop:
+  //   research → identity resolution → review → human decision → corrected
+  //   persistent identity → RE-RUN affected research → refreshed canonical
+  //   intelligence → refreshed downstream outputs.
+  //
+  // This is the AUTHORITATIVE re-run path. It deliberately does NOT invent a
+  // second research pipeline: it reuses the exact same repository reads,
+  // canonicalization service, canonical-profile load, and intelligence
+  // projection used by the primary research path, so the corrected persistent
+  // identity state is what drives the refreshed output.
+  //
+  // The caller (ReResearchService) supplies the persisted, post-decision
+  // entity state. This method rebuilds a fresh BusinessProfile and regenerates
+  // the canonical intelligence snapshot deterministically.
+  // ===========================================================================
+
+  /**
+   * Rebuild canonical business intelligence from a persisted entity's
+   * canonical fields. Deterministic — no provider fetches, no AI. Throws if
+   * the entity is absent, so callers surface persistence failures explicitly.
+   *
+   * @param {IdentityRepository} repo
+   * @param {string} entityId
+   * @param {Object} [providerTrace] - provider provenance labels for the snapshot
+   * @returns {Promise<Object>} intelligence in the standard profile shape
+   * @throws {NotFoundError} if the entity does not exist
+   */
+  async regenerateCanonicalIntelligence(repo, entityId, providerTrace = {}) {
+    const entity = repo.getEntityById(entityId);
+    if (!entity) {
+      throw new NotFoundError(`Entity ${entityId} not found; cannot regenerate intelligence.`);
+    }
+
+    const profile = new BusinessProfile();
+    profile.setEntityId(entityId);
+    await repo.loadCanonicalFieldsIntoProfile(entityId, profile);
+
+    const intelligence = this._profileToIntelligence(profile, {}, providerTrace);
+    Object.assign(intelligence, {
+      source: {
+        ...(intelligence.source || {}),
+        entityId,
+        refreshedAt: new Date().toISOString(),
+        refreshReason: 'post-review-rerun',
+        providers: providerTrace,
+      },
+    });
+    return intelligence;
+  }
 }
 
 export default new BusinessResearchService();
