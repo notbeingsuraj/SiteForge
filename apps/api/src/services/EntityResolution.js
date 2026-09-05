@@ -202,8 +202,26 @@ function normalizeAddressTokens(addr) {
  * @returns {'same'|'different'|'unknown'}
  */
 function compareLocations(addr1, addr2, coords1, coords2) {
-  if (coords1?.lat && coords1?.lng && coords2?.lat && coords2?.lng) {
-    const dist = calculateDistance(coords1.lat, coords1.lng, coords2.lat, coords2.lng);
+  // FIXED: Explicit coordinate validation instead of truthiness check
+  // "if (coords1?.lat && coords1?.lng)" fails for lat=0 or lng=0
+  const lat1 = coords1?.lat;
+  const lng1 = coords1?.lng;
+  const lat2 = coords2?.lat;
+  const lng2 = coords2?.lng;
+  
+  const validCoord1 = (
+    typeof lat1 === 'number' && !Number.isNaN(lat1) &&
+    typeof lng1 === 'number' && !Number.isNaN(lng1) &&
+    Math.abs(lat1) <= 90 && Math.abs(lng1) <= 180
+  );
+  const validCoord2 = (
+    typeof lat2 === 'number' && !Number.isNaN(lat2) &&
+    typeof lng2 === 'number' && !Number.isNaN(lng2) &&
+    Math.abs(lat2) <= 90 && Math.abs(lng2) <= 180
+  );
+
+  if (validCoord1 && validCoord2) {
+    const dist = calculateDistance(lat1, lng1, lat2, lng2);
     return dist <= DISTANCE_THRESHOLDS.COORDINATE_NEAR_METERS ? 'same' : 'different';
   }
 
@@ -253,52 +271,58 @@ export function calculateMatchScore(record1, record2) {
     }
   }
 
-  // Website matching
+  // Website/Domain matching
+  // CRITICAL FIX: normalizeWebsite() returns hostname, so website_exact and
+  // domain_exact are THE SAME evidence. Do NOT double-count.
+  // We use website_exact as the authoritative signal.
   const website1 = normalizeWebsite(record1?.contact?.website || record1?.website);
   const website2 = normalizeWebsite(record2?.contact?.website || record2?.website);
   if (website1 && website2) {
     if (website1 === website2) {
-      score += 0.25;
+      // Single score for domain match (not double-counted)
+      score += MATCH_SIGNAL_WEIGHTS.website_exact;
       signals.website_exact = true;
+      signals.domain_exact = true; // These are equivalent, but only score once
     } else {
       contradictions.push({ field: 'website', v1: website1, v2: website2 });
     }
   }
 
-  // Domain matching
-  const domain1 = normalizeWebsite(record1?.contact?.website || record1?.website);
-  const domain2 = normalizeWebsite(record2?.contact?.website || record2?.website);
-  if (domain1 && domain2) {
-    if (domain1 === domain2) {
-      score += 0.20;
-      signals.domain_exact = true;
-    }
-  }
-
-  // Coordinate matching
+  // Coordinate matching - with explicit validation (not truthiness)
   const coords1 = record1?.location?.coordinates || record1?.coordinates;
   const coords2 = record2?.location?.coordinates || record2?.coordinates;
-  if (coords1?.lat && coords1?.lng && coords2?.lat && coords2?.lng) {
-    const R = 6371000;
-    const φ1 = coords1.lat * Math.PI / 180;
-    const φ2 = coords2.lat * Math.PI / 180;
-    const Δφ = (coords2.lat - coords1.lat) * Math.PI / 180;
-    const Δλ = (coords2.lng - coords1.lng) * Math.PI / 180;
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    const dist = 6371000 * c;
+  
+  // Explicit validation: must be numbers in valid ranges, not just truthy
+  const lat1 = coords1?.lat;
+  const lng1 = coords1?.lng;
+  const lat2 = coords2?.lat;
+  const lng2 = coords2?.lng;
+  
+  const validCoord1 = (
+    typeof lat1 === 'number' && !Number.isNaN(lat1) &&
+    typeof lng1 === 'number' && !Number.isNaN(lng1) &&
+    Math.abs(lat1) <= 90 && Math.abs(lng1) <= 180
+  );
+  const validCoord2 = (
+    typeof lat2 === 'number' && !Number.isNaN(lat2) &&
+    typeof lng2 === 'number' && !Number.isNaN(lng2) &&
+    Math.abs(lat2) <= 90 && Math.abs(lng2) <= 180
+  );
+  
+  if (validCoord1 && validCoord2) {
+    const dist = calculateDistance(lat1, lng1, lat2, lng2);
 
-    if (dist <= 10) {
-      score += 0.30;
+    // FIXED: Removed unreachable branch (dist <= 50 inside dist <= 100)
+    // Order matters: check smallest thresholds first
+    if (dist <= DISTANCE_THRESHOLDS.COORDINATE_EXACT_METERS) {
+      score += MATCH_SIGNAL_WEIGHTS.coordinates_exact;
       signals.coordinates_exact = true;
-    } else if (dist <= 100) {
-      score += 0.20;
-      signals.coordinates_near = true;
-    } else if (dist <= 50) {
-      score += 0.16;
+    } else if (dist <= DISTANCE_THRESHOLDS.COORDINATE_SAME_BUILDING_METERS) {
+      score += 0.16; // same building, not near enough for exact
       signals.coordinates_same_building = true;
+    } else if (dist <= DISTANCE_THRESHOLDS.COORDINATE_NEAR_METERS) {
+      score += MATCH_SIGNAL_WEIGHTS.coordinates_near;
+      signals.coordinates_near = true;
     }
     signals.coordinate_distance_meters = Math.round(dist);
   }
